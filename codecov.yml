@@ -11,6 +11,6 @@ ignore:
   - "src/ui"
   - "src/core/io"
   - "src/main.rs"
-  - "src/input.rs"
+  - "src/editor/input.rs"
 comment:
   require_changes: true
