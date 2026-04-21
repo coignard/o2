@@ -1,0 +1,62 @@
+name: Release
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+on:
+  push:
+    tags:
+      - '[0-9]+.*'
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          changelog: CHANGELOG.md
+          token: ${{ secrets.GITHUB_TOKEN }}
+  upload-assets:
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: universal-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Update Rust
+        run: rustup update stable
+      - name: Install ALSA
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - uses: taiki-e/upload-rust-binary-action@v1
+        id: upload
+        with:
+          bin: o2
+          target: ${{ matrix.target }}
+          checksum: sha256
+          all-features: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/attest@v4
+        with:
+          subject-checksums: ${{ steps.upload.outputs.sha256 }}
+  update-homebrew:
+      needs: upload-assets
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v6
+        - name: Trigger tap update
+          run: |
+            gh workflow run update-formula.yml \
+              --repo coignard/homebrew-tap \
+              --field version=${{ github.ref_name }}
+          env:
+            GH_TOKEN: ${{ secrets.TAP_TOKEN }}

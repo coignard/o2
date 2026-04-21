@@ -1,0 +1,47 @@
+[package]
+name = "o2-rs"
+version = "0.1.0"
+authors = [
+    "René Coignard <contact@renecoignard.com>"
+]
+edition = "2024"
+rust-version = "1.94"
+license = "GPL-3.0-or-later"
+description = "Rust port of the Orca esoteric programming language and terminal livecoding environment"
+homepage = "https://coignard.org/o2"
+repository = "https://github.com/coignard/o2"
+readme = "README.md"
+keywords = ["midi", "sequencer", "livecoding", "tui", "orca"]
+categories = ["command-line-utilities", "multimedia::audio"]
+exclude = [".github/*"]
+
+[dependencies]
+clap = { version = "4.6.1", features = ["derive"] }
+ratatui = "0.30.0"
+crossterm = "0.29.0"
+midir = "0.11.0"
+arboard = "3.6.1"
+anyhow = "1.0.102"
+
+[dev-dependencies]
+proptest = "1.11.0"
+criterion = "0.8.2"
+
+[[bench]]
+name = "engine_bench"
+harness = false
+
+[lib]
+name = "o2_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "o2"
+path = "src/main.rs"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+opt-level = 3

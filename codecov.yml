@@ -1,0 +1,15 @@
+coverage:
+  precision: 1
+  round: down
+  range: 85..100
+  status:
+    project:
+      default:
+        threshold: 1%
+ignore:
+  - "benches"
+  - "src/main.rs"
+  - "src/ui.rs"
+  - "src/input.rs"
+comment:
+  require_changes: true
