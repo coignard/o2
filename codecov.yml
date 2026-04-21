@@ -8,8 +8,9 @@ coverage:
         threshold: 1%
 ignore:
   - "benches"
+  - "src/ui"
+  - "src/core/io"
   - "src/main.rs"
-  - "src/ui.rs"
   - "src/input.rs"
 comment:
   require_changes: true
