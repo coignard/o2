@@ -305,8 +305,16 @@ impl EditorState {
     /// Both scroll offsets are clamped so the viewport never extends beyond the
     /// grid boundaries.
     pub fn update_scroll(&mut self, viewport_w: usize, viewport_h: usize) {
-        let margin_x = if self.last_input_was_mouse { 0 } else { 3.min(viewport_w / 4) };
-        let margin_y = if self.last_input_was_mouse { 0 } else { 3.min(viewport_h / 4) };
+        let margin_x = if self.last_input_was_mouse {
+            0
+        } else {
+            3.min(viewport_w / 4)
+        };
+        let margin_y = if self.last_input_was_mouse {
+            0
+        } else {
+            3.min(viewport_h / 4)
+        };
 
         if self.cx < self.scroll_x + margin_x {
             self.scroll_x = self.cx.saturating_sub(margin_x);

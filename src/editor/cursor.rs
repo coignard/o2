@@ -171,12 +171,13 @@ impl EditorState {
         for y in self.min_y..=self.max_y {
             for x in self.min_x..=self.max_x {
                 if let Some((g, port, port_name, lock)) = block_iter.next()
-                    && let Some(idx) = self.index_at(x, y) {
-                        self.engine.cells[idx] = g;
-                        self.engine.ports[idx] = port;
-                        self.engine.port_names[idx] = port_name;
-                        self.engine.locks[idx] = lock;
-                    }
+                    && let Some(idx) = self.index_at(x, y)
+                {
+                    self.engine.cells[idx] = g;
+                    self.engine.ports[idx] = port;
+                    self.engine.port_names[idx] = port_name;
+                    self.engine.locks[idx] = lock;
+                }
             }
         }
 
