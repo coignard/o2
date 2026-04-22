@@ -41,6 +41,66 @@ use crate::core::operator::operator_name;
 use crate::core::transpose::transpose;
 use crate::editor::commander::run_command;
 
+struct VmContext<'a> {
+    app: &'a mut EditorState,
+    x: usize,
+    y: usize,
+    is_active: bool,
+    should_run: bool,
+    draws_ports: bool,
+    triggered: bool,
+}
+
+impl<'a> VmContext<'a> {
+    #[inline]
+    fn add_port(&mut self, dx: isize, dy: isize, is_output: bool, name: Option<&'static str>) {
+        self.app.add_port(
+            self.x,
+            self.y,
+            dx,
+            dy,
+            is_output,
+            self.is_active,
+            self.draws_ports,
+            name,
+        );
+    }
+
+    #[inline]
+    fn execute<F: FnOnce(&mut EditorState, usize, usize)>(&mut self, f: F) {
+        if self.should_run {
+            f(self.app, self.x, self.y);
+        }
+    }
+
+    #[inline]
+    fn execute_triggered<F: FnOnce(&mut EditorState, usize, usize)>(&mut self, f: F) {
+        if self.should_run && self.triggered {
+            f(self.app, self.x, self.y);
+        }
+    }
+
+    #[inline]
+    fn listen(&self, dx: isize, dy: isize) -> char {
+        self.app.listen(self.x, self.y, dx, dy)
+    }
+
+    #[inline]
+    fn listen_val(&self, dx: isize, dy: isize, min: usize, max: usize) -> usize {
+        self.app.listen_val(self.x, self.y, dx, dy, min, max)
+    }
+
+    #[inline]
+    fn lock(&mut self, dx: isize, dy: isize) {
+        self.app.lock(self.x, self.y, dx, dy)
+    }
+
+    #[inline]
+    fn clear_port(&mut self) {
+        self.app.set_port(self.x, self.y, None, None);
+    }
+}
+
 /// Executes the operator at grid position `(x, y)` with glyph `g`.
 ///
 /// # Parameters
@@ -64,198 +124,112 @@ pub fn run(app: &mut EditorState, x: usize, y: usize, g: char, force: bool, dry_
         app.add_op_port(x, y, Some(operator_name(gl)));
     }
 
+    let mut ctx = VmContext {
+        app,
+        x,
+        y,
+        is_active,
+        should_run,
+        draws_ports,
+        triggered: banged || force,
+    };
+
     match gl {
-        'a' => op_add(app, x, y, is_active, should_run, draws_ports),
-        'b' => op_sub(app, x, y, is_active, should_run, draws_ports),
-        'c' => op_clock(app, x, y, is_active, should_run, draws_ports),
-        'd' => op_delay(app, x, y, is_active, should_run, draws_ports),
-        'e' => {
-            app.set_port(x, y, None, None);
-            if should_run {
-                op_east(app, x, y, g, should_run)
-            }
-        }
-        'f' => op_if(app, x, y, is_active, should_run, draws_ports),
-        'g' => op_gen(app, x, y, is_active, should_run, draws_ports),
-        'h' => op_halt(app, x, y, is_active, should_run, draws_ports),
-        'i' => op_inc(app, x, y, is_active, should_run, draws_ports),
-        'j' => op_jumper(app, x, y, g, is_active, should_run, draws_ports),
-        'k' => op_konkat(app, x, y, is_active, should_run, draws_ports),
-        'l' => op_lesser(app, x, y, is_active, should_run, draws_ports),
-        'm' => op_mult(app, x, y, is_active, should_run, draws_ports),
-        'n' => {
-            app.set_port(x, y, None, None);
-            if should_run {
-                op_north(app, x, y, g, should_run)
-            }
-        }
-        'o' => op_read(app, x, y, is_active, should_run, draws_ports),
-        'p' => op_push(app, x, y, is_active, should_run, draws_ports),
-        'q' => op_query(app, x, y, is_active, should_run, draws_ports),
-        'r' => op_rand(app, x, y, is_active, should_run, draws_ports),
-        's' => {
-            app.set_port(x, y, None, None);
-            if should_run {
-                op_south(app, x, y, g, should_run)
-            }
-        }
-        't' => op_track(app, x, y, is_active, should_run, draws_ports),
-        'u' => op_uclid(app, x, y, is_active, should_run, draws_ports),
-        'v' => op_var(app, x, y, is_active, should_run, draws_ports),
-        'w' => {
-            app.set_port(x, y, None, None);
-            if should_run {
-                op_west(app, x, y, g, should_run)
-            }
-        }
-        'x' => op_write(app, x, y, is_active, should_run, draws_ports),
-        'y' => op_jymper(app, x, y, g, is_active, should_run, draws_ports),
-        'z' => op_lerp(app, x, y, is_active, should_run, draws_ports),
+        'a' => op_add(&mut ctx),
+        'b' => op_sub(&mut ctx),
+        'c' => op_clock(&mut ctx),
+        'd' => op_delay(&mut ctx),
+        'e' => op_east(&mut ctx, g),
+        'f' => op_if(&mut ctx),
+        'g' => op_gen(&mut ctx),
+        'h' => op_halt(&mut ctx),
+        'i' => op_inc(&mut ctx),
+        'j' => op_jumper(&mut ctx, g),
+        'k' => op_konkat(&mut ctx),
+        'l' => op_lesser(&mut ctx),
+        'm' => op_mult(&mut ctx),
+        'n' => op_north(&mut ctx, g),
+        'o' => op_read(&mut ctx),
+        'p' => op_push(&mut ctx),
+        'q' => op_query(&mut ctx),
+        'r' => op_rand(&mut ctx),
+        's' => op_south(&mut ctx, g),
+        't' => op_track(&mut ctx),
+        'u' => op_uclid(&mut ctx),
+        'v' => op_var(&mut ctx),
+        'w' => op_west(&mut ctx, g),
+        'x' => op_write(&mut ctx),
+        'y' => op_jymper(&mut ctx, g),
+        'z' => op_lerp(&mut ctx),
 
-        '*' => op_bang(app, x, y, should_run),
-        '#' => op_comment(app, x, y, is_active, should_run),
+        '*' => op_bang(&mut ctx),
+        '#' => op_comment(&mut ctx),
 
-        ':' | '%' => op_midi_mono(
-            app,
-            x,
-            y,
-            g,
-            is_active,
-            should_run,
-            draws_ports,
-            banged || force,
-        ),
-        '!' => op_cc(
-            app,
-            x,
-            y,
-            is_active,
-            should_run,
-            draws_ports,
-            banged || force,
-        ),
-        '?' => op_pb(
-            app,
-            x,
-            y,
-            is_active,
-            should_run,
-            draws_ports,
-            banged || force,
-        ),
-        '=' => op_osc(
-            app,
-            x,
-            y,
-            is_active,
-            should_run,
-            draws_ports,
-            banged || force,
-        ),
-        ';' => op_udp(
-            app,
-            x,
-            y,
-            is_active,
-            should_run,
-            draws_ports,
-            banged || force,
-        ),
-        '$' => op_self(app, x, y, is_active, should_run, banged || force),
+        ':' | '%' => op_midi_mono(&mut ctx, g),
+        '!' => op_cc(&mut ctx),
+        '?' => op_pb(&mut ctx),
+        '=' => op_osc(&mut ctx),
+        ';' => op_udp(&mut ctx),
+        '$' => op_self(&mut ctx),
         _ => {}
     }
 }
 
-fn op_add(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("a"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("b"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_add(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("a"));
+    ctx.add_port(1, 0, false, Some("b"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let a = app.listen_val(x, y, -1, 0, 0, 36);
         let b = app.listen_val(x, y, 1, 0, 0, 36);
         let uc = app.should_uppercase(x, y);
         app.write_port(x, y, 0, 1, EditorState::key_of(a + b, uc));
-    }
+    });
 }
 
-fn op_sub(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("a"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("b"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_sub(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("a"));
+    ctx.add_port(1, 0, false, Some("b"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let a = app.listen_val(x, y, -1, 0, 0, 36);
         let b = app.listen_val(x, y, 1, 0, 0, 36);
         let diff = (b as isize - a as isize).unsigned_abs();
         let uc = app.should_uppercase(x, y);
         app.write_port(x, y, 0, 1, EditorState::key_of(diff, uc));
-    }
+    });
 }
 
-fn op_mult(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("a"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("b"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_mult(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("a"));
+    ctx.add_port(1, 0, false, Some("b"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let a = app.listen_val(x, y, -1, 0, 0, 36);
         let b = app.listen_val(x, y, 1, 0, 0, 36);
         let uc = app.should_uppercase(x, y);
         app.write_port(x, y, 0, 1, EditorState::key_of(a * b, uc));
-    }
+    });
 }
 
-fn op_lesser(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("a"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("b"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_lesser(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("a"));
+    ctx.add_port(1, 0, false, Some("b"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let a = app.listen_val(x, y, -1, 0, 0, 36);
         let b = app.listen_val(x, y, 1, 0, 0, 36);
         let uc = app.should_uppercase(x, y);
         let min_val = a.min(b);
         app.write_port(x, y, 0, 1, EditorState::key_of(min_val, uc));
-    }
+    });
 }
 
-fn op_clock(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("rate"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("mod"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_clock(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("rate"));
+    ctx.add_port(1, 0, false, Some("mod"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let rate = app.listen_val(x, y, -1, 0, 1, 36);
         let m = app.listen_val(x, y, 1, 0, 0, 36);
         if m > 0 {
@@ -263,105 +237,70 @@ fn op_clock(
             let uc = app.should_uppercase(x, y);
             app.write_port(x, y, 0, 1, EditorState::key_of(val, uc));
         }
-    }
+    });
 }
 
-fn op_delay(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("rate"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("mod"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_delay(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("rate"));
+    ctx.add_port(1, 0, false, Some("mod"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let rate = app.listen_val(x, y, -1, 0, 1, 36);
         let m = app.listen_val(x, y, 1, 0, 1, 36);
         let res = app.engine.f % (m * rate);
         let out_char = if res == 0 || m == 1 { '*' } else { '.' };
         app.write_port(x, y, 0, 1, out_char);
-    }
+    });
 }
 
-fn op_if(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("a"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("b"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_if(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("a"));
+    ctx.add_port(1, 0, false, Some("b"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let a = app.listen(x, y, -1, 0);
         let b = app.listen(x, y, 1, 0);
         let out_char = if a == b { '*' } else { '.' };
         app.write_port(x, y, 0, 1, out_char);
-    }
+    });
 }
 
-fn op_gen(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -3, 0, false, is_active, draws_ports, Some("x"));
-    app.add_port(x, y, -2, 0, false, is_active, draws_ports, Some("y"));
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("len"));
+fn op_gen(ctx: &mut VmContext) {
+    ctx.add_port(-3, 0, false, Some("x"));
+    ctx.add_port(-2, 0, false, Some("y"));
+    ctx.add_port(-1, 0, false, Some("len"));
 
-    if is_active {
-        let px = app.listen_val(x, y, -3, 0, 0, 36) as isize;
-        let py = app.listen_val(x, y, -2, 0, 0, 36) as isize + 1;
-        let len = app.listen_val(x, y, -1, 0, 1, 36);
+    if ctx.is_active {
+        let px = ctx.listen_val(-3, 0, 0, 36) as isize;
+        let py = ctx.listen_val(-2, 0, 0, 36) as isize + 1;
+        let len = ctx.listen_val(-1, 0, 1, 36);
 
         for offset in 0..len {
             let in_x = offset as isize + 1;
             let out_x = px + offset as isize;
-            app.add_port(x, y, in_x, 0, false, is_active, draws_ports, Some("in"));
-            app.add_port(x, y, out_x, py, true, is_active, draws_ports, Some("out"));
-            if should_run {
+            ctx.add_port(in_x, 0, false, Some("in"));
+            ctx.add_port(out_x, py, true, Some("out"));
+            ctx.execute(|app, x, y| {
                 let res = app.listen(x, y, in_x, 0);
                 app.write_port(x, y, out_x, py, res);
-            }
+            });
         }
     }
 }
 
-fn op_halt(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_halt(ctx: &mut VmContext) {
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let val = app.listen(x, y, 0, 1);
         app.write_port(x, y, 0, 1, val);
-    }
+    });
 }
 
-fn op_inc(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("step"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("mod"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_inc(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("step"));
+    ctx.add_port(1, 0, false, Some("mod"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let step = app.listen_val(x, y, -1, 0, 0, 36);
         let m = app.listen_val(x, y, 1, 0, 0, 36);
         let val = app.listen_val(x, y, 0, 1, 0, 36);
@@ -372,324 +311,211 @@ fn op_inc(
             '0'
         };
         app.write_port(x, y, 0, 1, res);
-    }
+    });
 }
 
-fn op_jumper(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    g: char,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    if is_active {
+fn op_jumper(ctx: &mut VmContext, g: char) {
+    if ctx.is_active {
         let upper = g.to_ascii_uppercase();
-        let val = app.listen(x, y, 0, -1);
+        let val = ctx.listen(0, -1);
         if val != upper {
             let mut i = 1;
-            while app.is_in_bounds(x as isize, y as isize + i) {
-                if app.listen(x, y, 0, i) != g {
+            while ctx.app.is_in_bounds(ctx.x as isize, ctx.y as isize + i) {
+                if ctx.listen(0, i) != g {
                     break;
                 }
                 i += 1;
             }
-            app.add_port(x, y, 0, -1, false, is_active, draws_ports, Some("in"));
-            app.add_port(x, y, 0, i, true, is_active, draws_ports, Some("out"));
-            if should_run {
+            ctx.add_port(0, -1, false, Some("in"));
+            ctx.add_port(0, i, true, Some("out"));
+            ctx.execute(|app, x, y| {
                 app.write_port(x, y, 0, i, val);
-            }
+            });
         }
     }
 }
 
-fn op_konkat(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("len"));
-    if is_active {
-        let len = app.listen_val(x, y, -1, 0, 1, 36);
+fn op_konkat(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("len"));
+    if ctx.is_active {
+        let len = ctx.listen_val(-1, 0, 1, 36);
         for offset in 0..len {
-            let key = app.listen(x, y, offset as isize + 1, 0);
-            app.lock(x, y, offset as isize + 1, 0);
+            let key = ctx.listen(offset as isize + 1, 0);
+            ctx.lock(offset as isize + 1, 0);
             if key != '.' {
-                app.add_port(
-                    x,
-                    y,
-                    offset as isize + 1,
-                    0,
-                    false,
-                    is_active,
-                    draws_ports,
-                    Some("in"),
-                );
-                app.add_port(
-                    x,
-                    y,
-                    offset as isize + 1,
-                    1,
-                    true,
-                    is_active,
-                    draws_ports,
-                    Some("out"),
-                );
-                if should_run {
+                ctx.add_port(offset as isize + 1, 0, false, Some("in"));
+                ctx.add_port(offset as isize + 1, 1, true, Some("out"));
+                ctx.execute(|app, x, y| {
                     let res = app.var_read(key);
                     app.write_port(x, y, offset as isize + 1, 1, res);
-                }
+                });
             }
         }
     }
 }
 
-fn op_read(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -2, 0, false, is_active, draws_ports, Some("x"));
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("y"));
-    if is_active {
-        let px = app.listen_val(x, y, -2, 0, 0, 36) as isize;
-        let py = app.listen_val(x, y, -1, 0, 0, 36) as isize;
-        app.add_port(
-            x,
-            y,
-            px + 1,
-            py,
-            false,
-            is_active,
-            draws_ports,
-            Some("read"),
-        );
-        app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-        if should_run {
+fn op_read(ctx: &mut VmContext) {
+    ctx.add_port(-2, 0, false, Some("x"));
+    ctx.add_port(-1, 0, false, Some("y"));
+    if ctx.is_active {
+        let px = ctx.listen_val(-2, 0, 0, 36) as isize;
+        let py = ctx.listen_val(-1, 0, 0, 36) as isize;
+        ctx.add_port(px + 1, py, false, Some("read"));
+        ctx.add_port(0, 1, true, Some("out"));
+        ctx.execute(|app, x, y| {
             let val = app.listen(x, y, px + 1, py);
             app.write_port(x, y, 0, 1, val);
-        }
+        });
     }
 }
 
-fn op_push(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -2, 0, false, is_active, draws_ports, Some("key"));
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("len"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("val"));
-    if is_active {
-        let key = app.listen_val(x, y, -2, 0, 0, 36);
-        let len = app.listen_val(x, y, -1, 0, 1, 36);
+fn op_push(ctx: &mut VmContext) {
+    ctx.add_port(-2, 0, false, Some("key"));
+    ctx.add_port(-1, 0, false, Some("len"));
+    ctx.add_port(1, 0, false, Some("val"));
+    if ctx.is_active {
+        let key = ctx.listen_val(-2, 0, 0, 36);
+        let len = ctx.listen_val(-1, 0, 1, 36);
         for offset in 0..len {
-            app.lock(x, y, offset as isize, 1);
+            ctx.lock(offset as isize, 1);
         }
         let out_x = (key % len) as isize;
-        app.add_port(x, y, out_x, 1, true, is_active, draws_ports, Some("out"));
-        if should_run {
+        ctx.add_port(out_x, 1, true, Some("out"));
+        ctx.execute(|app, x, y| {
             let val = app.listen(x, y, 1, 0);
             app.write_port(x, y, out_x, 1, val);
-        }
+        });
     }
 }
 
-fn op_query(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -3, 0, false, is_active, draws_ports, Some("x"));
-    app.add_port(x, y, -2, 0, false, is_active, draws_ports, Some("y"));
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("len"));
-    if is_active {
-        let px = app.listen_val(x, y, -3, 0, 0, 36) as isize;
-        let py = app.listen_val(x, y, -2, 0, 0, 36) as isize;
-        let len = app.listen_val(x, y, -1, 0, 1, 36);
+fn op_query(ctx: &mut VmContext) {
+    ctx.add_port(-3, 0, false, Some("x"));
+    ctx.add_port(-2, 0, false, Some("y"));
+    ctx.add_port(-1, 0, false, Some("len"));
+    if ctx.is_active {
+        let px = ctx.listen_val(-3, 0, 0, 36) as isize;
+        let py = ctx.listen_val(-2, 0, 0, 36) as isize;
+        let len = ctx.listen_val(-1, 0, 1, 36);
         for offset in 0..len {
             let in_x = px + offset as isize + 1;
             let out_x = offset as isize - len as isize + 1;
-            app.add_port(x, y, in_x, py, false, is_active, draws_ports, Some("in"));
-            app.add_port(x, y, out_x, 1, true, is_active, draws_ports, Some("out"));
-            if should_run {
+            ctx.add_port(in_x, py, false, Some("in"));
+            ctx.add_port(out_x, 1, true, Some("out"));
+            ctx.execute(|app, x, y| {
                 let res = app.listen(x, y, in_x, py);
                 app.write_port(x, y, out_x, 1, res);
-            }
+            });
         }
     }
 }
 
-fn op_rand(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("a"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("b"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_rand(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("a"));
+    ctx.add_port(1, 0, false, Some("b"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let a = app.listen_val(x, y, -1, 0, 0, 36);
         let b = app.listen_val(x, y, 1, 0, 0, 36);
         let val = app.random(x, y, a, b);
         let uc = app.should_uppercase(x, y);
         app.write_port(x, y, 0, 1, EditorState::key_of(val, uc));
-    }
+    });
 }
 
-fn op_track(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -2, 0, false, is_active, draws_ports, Some("key"));
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("len"));
-    if is_active {
-        let key = app.listen_val(x, y, -2, 0, 0, 36);
-        let len = app.listen_val(x, y, -1, 0, 1, 36);
+fn op_track(ctx: &mut VmContext) {
+    ctx.add_port(-2, 0, false, Some("key"));
+    ctx.add_port(-1, 0, false, Some("len"));
+    if ctx.is_active {
+        let key = ctx.listen_val(-2, 0, 0, 36);
+        let len = ctx.listen_val(-1, 0, 1, 36);
         for offset in 0..len {
-            app.lock(x, y, offset as isize + 1, 0);
+            ctx.lock(offset as isize + 1, 0);
         }
         let in_x = (key % len) as isize + 1;
-        app.add_port(x, y, in_x, 0, false, is_active, draws_ports, Some("val"));
-        app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-        if should_run {
+        ctx.add_port(in_x, 0, false, Some("val"));
+        ctx.add_port(0, 1, true, Some("out"));
+        ctx.execute(|app, x, y| {
             let val = app.listen(x, y, in_x, 0);
             app.write_port(x, y, 0, 1, val);
-        }
+        });
     }
 }
 
-fn op_uclid(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("step"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("max"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_uclid(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("step"));
+    ctx.add_port(1, 0, false, Some("max"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let step = app.listen_val(x, y, -1, 0, 0, 36) as u64;
         let max = app.listen_val(x, y, 1, 0, 1, 36) as u64;
         let bucket = (step * (app.engine.f as u64 + max - 1)) % max + step;
         let out_char = if bucket >= max { '*' } else { '.' };
         app.write_port(x, y, 0, 1, out_char);
-    }
+    });
 }
 
-fn op_var(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("write"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("read"));
-    if is_active {
-        let write_key = app.listen(x, y, -1, 0);
-        let read_key = app.listen(x, y, 1, 0);
+fn op_var(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("write"));
+    ctx.add_port(1, 0, false, Some("read"));
+    if ctx.is_active {
+        let write_key = ctx.listen(-1, 0);
+        let read_key = ctx.listen(1, 0);
 
         if write_key == '.' && read_key != '.' {
-            app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
+            ctx.add_port(0, 1, true, Some("out"));
         }
-        if should_run {
+        ctx.execute(|app, x, y| {
             if write_key != '.' {
                 app.var_write(write_key, read_key);
             } else if read_key != '.' {
                 let res = app.var_read(read_key);
                 app.write_port(x, y, 0, 1, res);
             }
-        }
+        });
     }
 }
 
-fn op_write(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -2, 0, false, is_active, draws_ports, Some("x"));
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("y"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("val"));
-    if is_active {
-        let px = app.listen_val(x, y, -2, 0, 0, 36) as isize;
-        let py = app.listen_val(x, y, -1, 0, 0, 36) as isize + 1;
-        app.add_port(x, y, px, py, true, is_active, draws_ports, Some("out"));
-        if should_run {
+fn op_write(ctx: &mut VmContext) {
+    ctx.add_port(-2, 0, false, Some("x"));
+    ctx.add_port(-1, 0, false, Some("y"));
+    ctx.add_port(1, 0, false, Some("val"));
+    if ctx.is_active {
+        let px = ctx.listen_val(-2, 0, 0, 36) as isize;
+        let py = ctx.listen_val(-1, 0, 0, 36) as isize + 1;
+        ctx.add_port(px, py, true, Some("out"));
+        ctx.execute(|app, x, y| {
             let val = app.listen(x, y, 1, 0);
             app.write_port(x, y, px, py, val);
-        }
+        });
     }
 }
 
-fn op_jymper(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    g: char,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    if is_active {
+fn op_jymper(ctx: &mut VmContext, g: char) {
+    if ctx.is_active {
         let upper = g.to_ascii_uppercase();
-        let val = app.listen(x, y, -1, 0);
+        let val = ctx.listen(-1, 0);
         if val != upper {
             let mut i = 1;
-            while app.is_in_bounds(x as isize + i, y as isize) {
-                if app.listen(x, y, i, 0) != g {
+            while ctx.app.is_in_bounds(ctx.x as isize + i, ctx.y as isize) {
+                if ctx.listen(i, 0) != g {
                     break;
                 }
                 i += 1;
             }
-            app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("in"));
-            app.add_port(x, y, i, 0, true, is_active, draws_ports, Some("out"));
-            if should_run {
+            ctx.add_port(-1, 0, false, Some("in"));
+            ctx.add_port(i, 0, true, Some("out"));
+            ctx.execute(|app, x, y| {
                 app.write_port(x, y, i, 0, val);
-            }
+            });
         }
     }
 }
 
-fn op_lerp(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-) {
-    app.add_port(x, y, -1, 0, false, is_active, draws_ports, Some("rate"));
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("target"));
-    app.add_port(x, y, 0, 1, true, is_active, draws_ports, Some("out"));
-    if should_run {
+fn op_lerp(ctx: &mut VmContext) {
+    ctx.add_port(-1, 0, false, Some("rate"));
+    ctx.add_port(1, 0, false, Some("target"));
+    ctx.add_port(0, 1, true, Some("out"));
+    ctx.execute(|app, x, y| {
         let rate = app.listen_val(x, y, -1, 0, 0, 36) as isize;
         let target = app.listen_val(x, y, 1, 0, 0, 36) as isize;
         let val = app.listen_val(x, y, 0, 1, 0, 36) as isize;
@@ -703,50 +529,44 @@ fn op_lerp(
         let uc = app.should_uppercase(x, y);
         let result = (val + md).max(0) as usize;
         app.write_port(x, y, 0, 1, EditorState::key_of(result, uc));
-    }
+    });
 }
 
-fn op_east(app: &mut EditorState, x: usize, y: usize, g: char, should_run: bool) {
-    if should_run {
-        app.move_op(x, y, 1, 0, g);
-    }
+fn op_east(ctx: &mut VmContext, g: char) {
+    ctx.clear_port();
+    ctx.execute(|app, x, y| app.move_op(x, y, 1, 0, g));
 }
 
-fn op_west(app: &mut EditorState, x: usize, y: usize, g: char, should_run: bool) {
-    if should_run {
-        app.move_op(x, y, -1, 0, g);
-    }
+fn op_west(ctx: &mut VmContext, g: char) {
+    ctx.clear_port();
+    ctx.execute(|app, x, y| app.move_op(x, y, -1, 0, g));
 }
 
-fn op_north(app: &mut EditorState, x: usize, y: usize, g: char, should_run: bool) {
-    if should_run {
-        app.move_op(x, y, 0, -1, g);
-    }
+fn op_north(ctx: &mut VmContext, g: char) {
+    ctx.clear_port();
+    ctx.execute(|app, x, y| app.move_op(x, y, 0, -1, g));
 }
 
-fn op_south(app: &mut EditorState, x: usize, y: usize, g: char, should_run: bool) {
-    if should_run {
-        app.move_op(x, y, 0, 1, g);
-    }
+fn op_south(ctx: &mut VmContext, g: char) {
+    ctx.clear_port();
+    ctx.execute(|app, x, y| app.move_op(x, y, 0, 1, g));
 }
 
-fn op_bang(app: &mut EditorState, x: usize, y: usize, should_run: bool) {
-    app.set_port(x, y, None, None);
-    if should_run {
-        app.write_silent(x, y, '.');
-    }
+fn op_bang(ctx: &mut VmContext) {
+    ctx.clear_port();
+    ctx.execute(|app, x, y| app.write_silent(x, y, '.'));
 }
 
-fn op_comment(app: &mut EditorState, x: usize, y: usize, is_active: bool, _should_run: bool) {
-    if is_active {
-        app.set_port(x, y, None, None);
-        app.lock(x, y, 0, 0);
+fn op_comment(ctx: &mut VmContext) {
+    if ctx.is_active {
+        ctx.clear_port();
+        ctx.lock(0, 0);
         let mut i = 1;
-        while x + i < app.engine.w {
-            let px = x + i;
-            let idx = y * app.engine.w + px;
-            app.engine.locks[idx] = true;
-            if app.engine.cells[idx] == '#' {
+        while ctx.x + i < ctx.app.engine.w {
+            let px = ctx.x + i;
+            let idx = ctx.y * ctx.app.engine.w + px;
+            ctx.app.engine.locks[idx] = true;
+            if ctx.app.engine.cells[idx] == '#' {
                 break;
             }
             i += 1;
@@ -754,24 +574,14 @@ fn op_comment(app: &mut EditorState, x: usize, y: usize, is_active: bool, _shoul
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn op_midi_mono(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    g: char,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-    banged: bool,
-) {
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("channel"));
-    app.add_port(x, y, 2, 0, false, is_active, draws_ports, Some("octave"));
-    app.add_port(x, y, 3, 0, false, is_active, draws_ports, Some("note"));
-    app.add_port(x, y, 4, 0, false, is_active, draws_ports, Some("velocity"));
-    app.add_port(x, y, 5, 0, false, is_active, draws_ports, Some("length"));
+fn op_midi_mono(ctx: &mut VmContext, g: char) {
+    ctx.add_port(1, 0, false, Some("channel"));
+    ctx.add_port(2, 0, false, Some("octave"));
+    ctx.add_port(3, 0, false, Some("note"));
+    ctx.add_port(4, 0, false, Some("velocity"));
+    ctx.add_port(5, 0, false, Some("length"));
 
-    if should_run && banged {
+    ctx.execute_triggered(|app, x, y| {
         app.set_port(x, y, None, None);
 
         let ch_g = app.listen(x, y, 1, 0);
@@ -850,23 +660,15 @@ fn op_midi_mono(
                 app.midi.stack.push(new_note);
             }
         }
-    }
+    });
 }
 
-fn op_cc(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-    banged: bool,
-) {
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("channel"));
-    app.add_port(x, y, 2, 0, false, is_active, draws_ports, Some("knob"));
-    app.add_port(x, y, 3, 0, false, is_active, draws_ports, Some("value"));
+fn op_cc(ctx: &mut VmContext) {
+    ctx.add_port(1, 0, false, Some("channel"));
+    ctx.add_port(2, 0, false, Some("knob"));
+    ctx.add_port(3, 0, false, Some("value"));
 
-    if should_run && banged {
+    ctx.execute_triggered(|app, x, y| {
         app.set_port(x, y, None, None);
         let ch_g = app.listen(x, y, 1, 0);
         let knob_g = app.listen(x, y, 2, 0);
@@ -894,23 +696,15 @@ fn op_cc(
             knob: knob as u8,
             value,
         }));
-    }
+    });
 }
 
-fn op_pb(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-    banged: bool,
-) {
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("channel"));
-    app.add_port(x, y, 2, 0, false, is_active, draws_ports, Some("lsb"));
-    app.add_port(x, y, 3, 0, false, is_active, draws_ports, Some("msb"));
+fn op_pb(ctx: &mut VmContext) {
+    ctx.add_port(1, 0, false, Some("channel"));
+    ctx.add_port(2, 0, false, Some("lsb"));
+    ctx.add_port(3, 0, false, Some("msb"));
 
-    if should_run && banged {
+    ctx.execute_triggered(|app, x, y| {
         app.set_port(x, y, None, None);
         let ch_g = app.listen(x, y, 1, 0);
         let lsb_g = app.listen(x, y, 2, 0);
@@ -937,29 +731,21 @@ fn op_pb(
             lsb,
             msb,
         }));
-    }
+    });
 }
 
-fn op_osc(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    draws_ports: bool,
-    banged: bool,
-) {
-    app.add_port(x, y, 1, 0, false, is_active, draws_ports, Some("path"));
-    if is_active {
+fn op_osc(ctx: &mut VmContext) {
+    ctx.add_port(1, 0, false, Some("path"));
+    if ctx.is_active {
         for i in 2..=36 {
-            let g = app.listen(x, y, i, 0);
-            app.lock(x, y, i, 0);
+            let g = ctx.listen(i, 0);
+            ctx.lock(i, 0);
             if g == '.' {
                 break;
             }
         }
     }
-    if should_run && banged {
+    ctx.execute_triggered(|app, x, y| {
         app.set_port(x, y, None, None);
         let path_g = app.listen(x, y, 1, 0);
         if path_g != '.' {
@@ -973,28 +759,20 @@ fn op_osc(
             }
             app.midi.osc_stack.push((path_g.to_string(), msg));
         }
-    }
+    });
 }
 
-fn op_udp(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    _draws_ports: bool,
-    banged: bool,
-) {
-    if is_active {
+fn op_udp(ctx: &mut VmContext) {
+    if ctx.is_active {
         for i in 1..=36 {
-            let g = app.listen(x, y, i, 0);
-            app.lock(x, y, i, 0);
+            let g = ctx.listen(i, 0);
+            ctx.lock(i, 0);
             if g == '.' {
                 break;
             }
         }
     }
-    if should_run && banged {
+    ctx.execute_triggered(|app, x, y| {
         app.set_port(x, y, None, None);
         let mut msg = String::with_capacity(35);
         for i in 1..=36 {
@@ -1007,28 +785,21 @@ fn op_udp(
         if !msg.is_empty() {
             app.midi.udp_stack.push(msg);
         }
-    }
+    });
 }
 
-fn op_self(
-    app: &mut EditorState,
-    x: usize,
-    y: usize,
-    is_active: bool,
-    should_run: bool,
-    banged: bool,
-) {
-    if is_active {
-        app.add_op_port(x, y, Some("self"));
+fn op_self(ctx: &mut VmContext) {
+    if ctx.is_active {
+        ctx.app.add_op_port(ctx.x, ctx.y, Some("self"));
         for i in 1..=36 {
-            let g = app.listen(x, y, i, 0);
-            app.lock(x, y, i, 0);
+            let g = ctx.listen(i, 0);
+            ctx.lock(i, 0);
             if g == '.' {
                 break;
             }
         }
     }
-    if should_run && banged {
+    ctx.execute_triggered(|app, x, y| {
         app.set_port(x, y, None, None);
         let mut msg = String::with_capacity(35);
         for i in 1..=36 {
@@ -1041,7 +812,7 @@ fn op_self(
         if !msg.is_empty() {
             run_command(app, &msg, Some((x, y + 1)));
         }
-    }
+    });
 }
 
 #[cfg(test)]

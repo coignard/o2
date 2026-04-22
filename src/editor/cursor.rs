@@ -64,14 +64,45 @@ impl EditorState {
         );
     }
 
-    /// Extends the selection by `(dw, -dh)`, keeping the cursor at its current
-    /// position.
+    /// Extends or contracts the selection by moving the cursor anchor to `(cx + dw, cy - dh)`.
+    ///
+    /// Unlike [`move_cursor`](EditorState::move_cursor), which translates both the
+    /// cursor and the selection origin together, `scale_cursor` keeps the opposite
+    /// corner of the selection fixed and repositions only the anchor. This
+    /// produces a rubber-band resize effect used when Shift or Selection mode is
+    /// active with the arrow keys.
+    ///
+    /// Both the new anchor and the resulting selection are clamped to the grid
+    /// boundaries via [`select`](EditorState::select).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use o2_rs::core::app::EditorState;
+    ///
+    /// let mut app = EditorState::new(10, 10, 1, 100);
+    /// app.select(5, 5, 0, 0);
+    /// app.scale_cursor(2, -2); // move anchor right 2, down 2
+    /// assert_eq!(app.cx, 7);
+    /// assert_eq!(app.cy, 7);
+    /// assert_eq!(app.cw, -2);
+    /// assert_eq!(app.ch, -2);
+    /// ```
     pub fn scale_cursor(&mut self, dw: isize, dh: isize) {
+        let max_grid_x = (self.engine.w.saturating_sub(1)) as isize;
+        let max_grid_y = (self.engine.h.saturating_sub(1)) as isize;
+
+        let target_cx = (self.cx as isize + dw).clamp(0, max_grid_x);
+        let target_cy = (self.cy as isize - dh).clamp(0, max_grid_y);
+
+        let origin_x = self.cx as isize + self.cw;
+        let origin_y = self.cy as isize + self.ch;
+
         self.select(
-            self.cx as isize,
-            self.cy as isize,
-            self.cw + dw,
-            self.ch - dh,
+            target_cx,
+            target_cy,
+            origin_x - target_cx,
+            origin_y - target_cy,
         );
     }
 
@@ -85,27 +116,71 @@ impl EditorState {
         if self.mode == InputMode::Append {
             self.mode = InputMode::Normal;
         }
+
+        let max_x_allowed = self.engine.w.saturating_sub(1);
+        let max_y_allowed = self.engine.h.saturating_sub(1);
+
+        let actual_dx = dx.clamp(
+            -(self.min_x as isize),
+            (max_x_allowed.saturating_sub(self.max_x)) as isize,
+        );
+
+        let actual_dy = (-dy).clamp(
+            -(self.min_y as isize),
+            (max_y_allowed.saturating_sub(self.max_y)) as isize,
+        );
+
+        if actual_dx == 0 && actual_dy == 0 {
+            return;
+        }
+
         let rows_count = (self.max_y - self.min_y) + 1;
         let cols_count = (self.max_x - self.min_x) + 1;
-        let mut block = Vec::with_capacity(rows_count);
-        for y in self.min_y..=self.max_y {
-            let mut row = Vec::with_capacity(cols_count);
-            for x in self.min_x..=self.max_x {
-                row.push(self.glyph_at(x, y));
-            }
-            block.push(row);
-        }
-        self.erase();
-        self.move_cursor(dx, dy);
-        for (j, row) in block.iter().enumerate() {
-            for (i, &g) in row.iter().enumerate() {
-                self.write_silent(self.min_x + i, self.min_y + j, g);
-            }
-        }
-        self.history.record(&self.engine.cells);
 
-        // Who you gon' call? (Ghostbusters!)
-        self.update_ports();
+        let mut block = Vec::with_capacity(rows_count * cols_count);
+
+        for y in self.min_y..=self.max_y {
+            for x in self.min_x..=self.max_x {
+                if let Some(idx) = self.index_at(x, y) {
+                    block.push((
+                        self.engine.cells[idx],
+                        self.engine.ports[idx],
+                        self.engine.port_names[idx],
+                        self.engine.locks[idx],
+                    ));
+                } else {
+                    block.push(('.', None, None, false));
+                }
+            }
+        }
+
+        for y in self.min_y..=self.max_y {
+            for x in self.min_x..=self.max_x {
+                if let Some(idx) = self.index_at(x, y) {
+                    self.engine.cells[idx] = '.';
+                    self.engine.ports[idx] = None;
+                    self.engine.port_names[idx] = None;
+                    self.engine.locks[idx] = false;
+                }
+            }
+        }
+
+        self.move_cursor(actual_dx, -actual_dy);
+
+        let mut block_iter = block.into_iter();
+        for y in self.min_y..=self.max_y {
+            for x in self.min_x..=self.max_x {
+                if let Some((g, port, port_name, lock)) = block_iter.next()
+                    && let Some(idx) = self.index_at(x, y) {
+                        self.engine.cells[idx] = g;
+                        self.engine.ports[idx] = port;
+                        self.engine.port_names[idx] = port_name;
+                        self.engine.locks[idx] = lock;
+                    }
+            }
+        }
+
+        self.history.record(&self.engine.cells);
     }
 
     /// Returns `true` if `(x, y)` lies within the normalised selection bounding
@@ -137,7 +212,13 @@ impl EditorState {
     pub fn erase(&mut self) {
         for y in self.min_y..=self.max_y {
             for x in self.min_x..=self.max_x {
-                self.write_silent(x, y, '.');
+                if let Some(idx) = self.index_at(x, y) {
+                    // Who you gon' call? (Ghostbusters!)
+                    self.engine.cells[idx] = '.';
+                    self.engine.ports[idx] = None;
+                    self.engine.port_names[idx] = None;
+                    self.engine.locks[idx] = false;
+                }
             }
         }
         self.history.record(&self.engine.cells);
@@ -302,8 +383,9 @@ mod tests {
     #[test]
     fn test_drag_out_of_bounds_clamp() {
         let mut app = create_app();
-        app.select(8, 8, 1, 1);
+        app.select(8, 8, 0, 0);
         app.drag(5, -5);
+
         assert_eq!(app.cx, 9);
         assert_eq!(app.cy, 9);
         assert_eq!(app.glyph_at(9, 9), 'q');
@@ -378,12 +460,16 @@ mod tests {
         let mut app = create_app();
         app.select(5, 5, 0, 0);
         app.scale_cursor(2, -2);
-        assert_eq!(app.cw, 2);
-        assert_eq!(app.ch, 2);
+        assert_eq!(app.cx, 7);
+        assert_eq!(app.cy, 7);
+        assert_eq!(app.cw, -2);
+        assert_eq!(app.ch, -2);
 
         app.scale_cursor(-10, 10);
-        assert_eq!(app.cw, -5);
-        assert_eq!(app.ch, -5);
+        assert_eq!(app.cx, 0);
+        assert_eq!(app.cy, 0);
+        assert_eq!(app.cw, 5);
+        assert_eq!(app.ch, 5);
     }
 
     #[test]

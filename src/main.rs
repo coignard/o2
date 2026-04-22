@@ -119,7 +119,6 @@ struct Cli {
     )]
     version: Option<bool>,
 
-    ///
     /// Reduce the timing jitter of outgoing MIDI and OSC messages.
     /// Uses more CPU time.
     #[arg(long, help_heading = "OSC/MIDI options", verbatim_doc_comment)]
@@ -172,7 +171,7 @@ fn main() -> Result<()> {
         && let Ok(content) = std::fs::read_to_string(&path)
     {
         app.load(&content, Some(path));
-        app.resize(term_w, term_h);
+        app.resize(term_w.max(app.engine.w), term_h.max(app.engine.h));
     }
 
     if app.paused {
@@ -186,6 +185,11 @@ fn main() -> Result<()> {
 
     loop {
         if needs_draw {
+            let size = terminal.size()?;
+            let viewport_w = size.width as usize;
+            let viewport_h = size.height.saturating_sub(2) as usize;
+            app.update_scroll(viewport_w, viewport_h);
+
             terminal.draw(|f| render::draw(f, &app))?;
             needs_draw = false;
         }
@@ -209,7 +213,10 @@ fn main() -> Result<()> {
 
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Resize(_cols, _rows) => {
+                Event::Resize(cols, rows) => {
+                    let new_w = (cols as usize).max(app.engine.w);
+                    let new_h = (rows.saturating_sub(2) as usize).max(app.engine.h);
+                    app.resize(new_w, new_h);
                     if app.paused {
                         app.update_ports();
                     }

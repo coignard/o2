@@ -177,6 +177,11 @@ pub struct EditorState {
     /// Vertical spacing between grid marker lines.
     pub grid_h: usize,
 
+    /// Horizontal scroll offset: the grid column shown at the left edge of the viewport.
+    pub scroll_x: usize,
+    /// Vertical scroll offset: the grid row shown at the top edge of the viewport.
+    pub scroll_y: usize,
+
     /// Cursor column.
     pub cx: usize,
     /// Cursor row.
@@ -216,6 +221,8 @@ pub struct EditorState {
     pub bpm_target: usize,
     /// Screen cell where a mouse drag began, used to compute selection bounds.
     pub mouse_from: Option<(usize, usize)>,
+    /// When `true`, [`update_scroll`](EditorState::update_scroll) applies no scroll margin.
+    pub last_input_was_mouse: bool,
 
     /// Path to the file currently open in the editor, if any.
     pub current_file: Option<PathBuf>,
@@ -255,6 +262,8 @@ impl EditorState {
             engine: Engine::new(w, h, seed),
             grid_w: 8,
             grid_h: 8,
+            scroll_x: 0,
+            scroll_y: 0,
             cx: 0,
             cy: 0,
             cw: 0,
@@ -273,6 +282,7 @@ impl EditorState {
             bpm: 120,
             bpm_target: 120,
             mouse_from: None,
+            last_input_was_mouse: false,
             current_file: None,
             history,
             midi: MidiState::new(),
@@ -284,35 +294,36 @@ impl EditorState {
         app
     }
 
-    /// Computes the scroll offset needed to keep the cursor visible.
+    /// Adjusts [`scroll_x`](EditorState::scroll_x) and [`scroll_y`](EditorState::scroll_y)
+    /// so the cursor stays visible within the viewport.
     ///
-    /// # Examples
+    /// A margin of up to three cells is maintained around the cursor when the
+    /// last input was from the keyboard. When [`last_input_was_mouse`](EditorState::last_input_was_mouse)
+    /// is `true` no margin is applied, so the view does not shift unexpectedly
+    /// after a mouse click.
     ///
-    /// ```
-    /// use o2_rs::core::app::EditorState;
-    ///
-    /// let app = EditorState::new(20, 20, 1, 100);
-    /// assert_eq!(app.viewport_scroll(20, 20), (0, 0));
-    /// ```
-    pub fn viewport_scroll(&self, viewport_w: usize, viewport_h: usize) -> (usize, usize) {
-        let mut scroll_x = 0;
-        let mut scroll_y = 0;
+    /// Both scroll offsets are clamped so the viewport never extends beyond the
+    /// grid boundaries.
+    pub fn update_scroll(&mut self, viewport_w: usize, viewport_h: usize) {
+        let margin_x = if self.last_input_was_mouse { 0 } else { 3.min(viewport_w / 4) };
+        let margin_y = if self.last_input_was_mouse { 0 } else { 3.min(viewport_h / 4) };
 
-        if self.engine.w > viewport_w {
-            let half_w = viewport_w / 2;
-            if self.cx >= half_w {
-                scroll_x = (self.cx - half_w).min(self.engine.w - viewport_w);
-            }
+        if self.cx < self.scroll_x + margin_x {
+            self.scroll_x = self.cx.saturating_sub(margin_x);
+        } else if self.cx >= self.scroll_x + viewport_w.saturating_sub(margin_x) {
+            self.scroll_x = (self.cx + margin_x + 1).saturating_sub(viewport_w);
         }
 
-        if self.engine.h > viewport_h {
-            let half_h = viewport_h / 2;
-            if self.cy >= half_h {
-                scroll_y = (self.cy - half_h).min(self.engine.h - viewport_h);
-            }
+        if self.cy < self.scroll_y + margin_y {
+            self.scroll_y = self.cy.saturating_sub(margin_y);
+        } else if self.cy >= self.scroll_y + viewport_h.saturating_sub(margin_y) {
+            self.scroll_y = (self.cy + margin_y + 1).saturating_sub(viewport_h);
         }
 
-        (scroll_x, scroll_y)
+        let max_scroll_x = self.engine.w.saturating_sub(viewport_w);
+        let max_scroll_y = self.engine.h.saturating_sub(viewport_h);
+        self.scroll_x = self.scroll_x.min(max_scroll_x);
+        self.scroll_y = self.scroll_y.min(max_scroll_y);
     }
 
     /// Returns the bounding box of all non-empty cells as `(width, height)`.
@@ -475,6 +486,8 @@ impl EditorState {
 
         let mut new_cells = vec!['.'; final_w * final_h];
         let mut new_locks = vec![false; final_w * final_h];
+        let mut new_ports = vec![None; final_w * final_h];
+        let mut new_port_names = vec![None; final_w * final_h];
 
         for y in 0..self.engine.h.min(final_h) {
             for x in 0..self.engine.w.min(final_w) {
@@ -482,6 +495,8 @@ impl EditorState {
                 let new_idx = y * final_w + x;
                 new_cells[new_idx] = self.engine.cells[old_idx];
                 new_locks[new_idx] = self.engine.locks[old_idx];
+                new_ports[new_idx] = self.engine.ports[old_idx];
+                new_port_names[new_idx] = self.engine.port_names[old_idx];
             }
         }
 
@@ -489,8 +504,8 @@ impl EditorState {
         self.engine.h = final_h;
         self.engine.cells = new_cells;
         self.engine.locks = new_locks;
-        self.engine.ports = vec![None; self.engine.w * self.engine.h];
-        self.engine.port_names = vec![None; self.engine.w * self.engine.h];
+        self.engine.ports = new_ports;
+        self.engine.port_names = new_port_names;
 
         self.select(self.cx as isize, self.cy as isize, self.cw, self.ch);
         self.history.clear();
@@ -956,6 +971,8 @@ impl std::fmt::Debug for EditorState {
             .field("engine_h", &self.engine.h)
             .field("grid_w", &self.grid_w)
             .field("grid_h", &self.grid_h)
+            .field("scroll_x", &self.scroll_x)
+            .field("scroll_y", &self.scroll_y)
             .field("cx", &self.cx)
             .field("cy", &self.cy)
             .field("cw", &self.cw)
@@ -965,6 +982,7 @@ impl std::fmt::Debug for EditorState {
             .field("f", &self.engine.f)
             .field("bpm", &self.bpm)
             .field("bpm_target", &self.bpm_target)
+            .field("last_input_was_mouse", &self.last_input_was_mouse)
             .field("midi_bclock", &self.midi_bclock)
             .field("midi", &self.midi)
             .finish_non_exhaustive()
@@ -1336,17 +1354,35 @@ mod tests {
     }
 
     #[test]
-    fn test_viewport_scroll() {
+    fn test_update_scroll() {
         let mut app = create_app(20, 20);
-        assert_eq!(app.viewport_scroll(10, 10), (0, 0));
+        app.update_scroll(10, 10);
+        assert_eq!(app.scroll_x, 0);
+        assert_eq!(app.scroll_y, 0);
 
         app.cx = 15;
         app.cy = 15;
-        assert_eq!(app.viewport_scroll(10, 10), (10, 10));
+        app.update_scroll(10, 10);
+        assert_eq!(app.scroll_x, 8);
+        assert_eq!(app.scroll_y, 8);
 
         app.cx = 6;
         app.cy = 8;
-        assert_eq!(app.viewport_scroll(10, 10), (1, 3));
+        app.update_scroll(10, 10);
+        assert_eq!(app.scroll_x, 4);
+        assert_eq!(app.scroll_y, 6);
+    }
+
+    #[test]
+    fn test_update_scroll_mouse() {
+        let mut app = create_app(20, 20);
+        app.last_input_was_mouse = true;
+
+        app.cx = 15;
+        app.cy = 15;
+        app.update_scroll(10, 10);
+        assert_eq!(app.scroll_x, 6);
+        assert_eq!(app.scroll_y, 6);
     }
 
     #[test]

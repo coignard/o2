@@ -109,6 +109,7 @@ fn arvelie_neralie() -> String {
 /// left-click outside dismisses the popup.  Scroll events on the grid move
 /// the cursor one cell in the corresponding direction.
 pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
+    app.last_input_was_mouse = true;
     let col = mouse_event.column;
     let row = mouse_event.row;
 
@@ -220,12 +221,12 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
     let col = col as usize;
     let row = row as usize;
 
-    let (term_cols, term_rows) =
+    let (_term_cols, term_rows) =
         crossterm::terminal::size().unwrap_or((app.engine.w as u16, app.engine.h as u16));
-    let viewport_w = term_cols as usize;
     let viewport_h = term_rows.saturating_sub(2) as usize;
 
-    let (scroll_x, scroll_y) = app.viewport_scroll(viewport_w, viewport_h);
+    let scroll_x = app.scroll_x;
+    let scroll_y = app.scroll_y;
     let grid_x = col + scroll_x;
     let grid_y = row + scroll_y;
 
@@ -242,10 +243,10 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                 let col_clamped = grid_x.min(app.engine.w.saturating_sub(1));
                 let row_clamped = grid_y.min(app.engine.h.saturating_sub(1));
                 app.select(
-                    sx as isize,
-                    sy as isize,
-                    col_clamped as isize - sx as isize,
-                    row_clamped as isize - sy as isize,
+                    col_clamped as isize,
+                    row_clamped as isize,
+                    sx as isize - col_clamped as isize,
+                    sy as isize - row_clamped as isize,
                 );
             }
         }
@@ -254,10 +255,10 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                 let col_clamped = grid_x.min(app.engine.w.saturating_sub(1));
                 let row_clamped = grid_y.min(app.engine.h.saturating_sub(1));
                 app.select(
-                    sx as isize,
-                    sy as isize,
-                    col_clamped as isize - sx as isize,
-                    row_clamped as isize - sy as isize,
+                    col_clamped as isize,
+                    row_clamped as isize,
+                    sx as isize - col_clamped as isize,
+                    sy as isize - row_clamped as isize,
                 );
             }
             app.mouse_from = None;
@@ -284,6 +285,7 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
 /// and it is appended to the query string, triggering a live preview.
 /// Otherwise the text is passed directly to [`EditorState::paste_text`].
 pub fn handle_paste(app: &mut EditorState, text: &str) {
+    app.last_input_was_mouse = false;
     if app.commander_active {
         let clean_text = text.replace(['\n', '\r'], "");
         app.query.push_str(&clean_text);
@@ -310,6 +312,8 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
     if key.kind != KeyEventKind::Press && key.kind != KeyEventKind::Repeat {
         return;
     }
+
+    app.last_input_was_mouse = false;
 
     let ctrl =
         key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::META);

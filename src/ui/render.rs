@@ -20,7 +20,7 @@
 //! This module implements the complete draw cycle for o2, covering:
 //!
 //! - The main grid, with glyphs, port decorations, selection highlights, and
-//!   scroll offsets computed via [`EditorState::viewport_scroll`].
+//!   scroll offsets computed dynamically to follow the cursor.
 //! - The two-row status bar below the grid, showing the inspector, cursor
 //!   position, frame counter, MIDI activity, BPM clock, and variables.
 //! - All overlay popups stacked on top of the grid, from the main menu to
@@ -132,8 +132,8 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
     let grid_area = chunks[0];
     let status_area = chunks[1];
 
-    let (scroll_x, scroll_y) =
-        app.viewport_scroll(grid_area.width as usize, grid_area.height as usize);
+    let scroll_x = app.scroll_x;
+    let scroll_y = app.scroll_y;
 
     let visible_h = (grid_area.height as usize).min(app.engine.h.saturating_sub(scroll_y));
     let visible_w = (grid_area.width as usize).min(app.engine.w.saturating_sub(scroll_x));
