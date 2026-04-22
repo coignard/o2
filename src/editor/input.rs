@@ -183,6 +183,19 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                         trigger_action = true;
                     }
                 }
+                PopupType::ConfirmQuit { selected, has_file } => {
+                    let options_count = if *has_file { 4 } else { 3 };
+                    if let MouseEventKind::ScrollUp = mouse_event.kind {
+                        *selected = selected.saturating_sub(1);
+                    } else if let MouseEventKind::ScrollDown = mouse_event.kind {
+                        *selected = (*selected + 1).min(options_count - 1);
+                    } else if let MouseEventKind::Down(MouseButton::Left) = mouse_event.kind
+                        && rel_y < options_count
+                    {
+                        *selected = rel_y;
+                        trigger_action = true;
+                    }
+                }
                 PopupType::ClockMenu { selected } => {
                     if let MouseEventKind::Down(MouseButton::Left) = mouse_event.kind
                         && rel_y == 0
@@ -317,17 +330,13 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
 
     let ctrl =
         key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::META);
-    if ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
-        app.running = false;
-        return;
-    }
 
     if let Some(mut popup) = app.popup.pop() {
         let mut close_popup = false;
         let mut pop_parent = false;
         let mut spawn_popups = Vec::new();
 
-        let consumed = match &mut popup {
+        match &mut popup {
             PopupType::Controls
             | PopupType::Operators
             | PopupType::About { .. }
@@ -341,107 +350,162 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                         | KeyCode::Enter
                 ) {
                     close_popup = true;
-                    true
-                } else {
-                    false
                 }
             }
-            PopupType::MainMenu { selected } => {
-                match key.code {
-                    KeyCode::Esc | KeyCode::Left => close_popup = true,
-                    KeyCode::Up => *selected = main_menu_up(*selected),
-                    KeyCode::Down => *selected = main_menu_down(*selected),
-                    KeyCode::Enter | KeyCode::Right | KeyCode::Char(' ') => match *selected {
-                        0 => spawn_popups.push(PopupType::ConfirmNew { selected: 0 }),
-                        1 => spawn_popups.push(PopupType::Prompt {
-                            purpose: PromptPurpose::Open,
-                            input: String::new(),
-                        }),
-                        2 => {
-                            if app.current_file.is_none() {
-                                app.current_file = Some(std::path::PathBuf::from(format!(
-                                    "patch-{}.o2",
-                                    arvelie_neralie()
-                                )));
-                            }
+            PopupType::MainMenu { selected } => match key.code {
+                KeyCode::Esc | KeyCode::Left => close_popup = true,
+                KeyCode::Up => *selected = main_menu_up(*selected),
+                KeyCode::Down => *selected = main_menu_down(*selected),
+                KeyCode::Enter | KeyCode::Right | KeyCode::Char(' ') => match *selected {
+                    0 => spawn_popups.push(PopupType::ConfirmNew { selected: 0 }),
+                    1 => spawn_popups.push(PopupType::Prompt {
+                        purpose: PromptPurpose::Open,
+                        input: String::new(),
+                    }),
+                    2 => {
+                        if app.current_file.is_some() {
                             if app.save() {
                                 spawn_popups.push(PopupType::Msg {
                                     title: "Saved".into(),
                                     text: "File saved successfully.".into(),
                                 });
-                                close_popup = true;
                             } else {
                                 spawn_popups.push(PopupType::Msg {
                                     title: "Error".into(),
                                     text: "Could not save file.".into(),
                                 });
                             }
-                        }
-                        3 => spawn_popups.push(PopupType::Prompt {
-                            purpose: PromptPurpose::SaveAs,
-                            input: String::new(),
-                        }),
-                        5 => spawn_popups.push(PopupType::Prompt {
-                            purpose: PromptPurpose::SetBpm,
-                            input: app.bpm.to_string(),
-                        }),
-                        6 => spawn_popups.push(PopupType::Prompt {
-                            purpose: PromptPurpose::SetGridSize,
-                            input: format!("{}x{}", app.engine.w, app.engine.h),
-                        }),
-                        7 => spawn_popups.push(PopupType::AutofitMenu { selected: 0 }),
-                        9 => {
-                            let devices = app.get_midi_output_devices();
-                            spawn_popups.push(PopupType::MidiMenu {
-                                selected: 0,
-                                devices,
+                        } else {
+                            let default_name = format!("patch-{}.o2", arvelie_neralie());
+                            spawn_popups.push(PopupType::Prompt {
+                                purpose: PromptPurpose::SaveAs { quit_after: false },
+                                input: default_name,
                             });
                         }
-                        11 => spawn_popups.push(PopupType::ClockMenu { selected: 0 }),
-                        13 => spawn_popups.push(PopupType::Controls),
-                        14 => spawn_popups.push(PopupType::Operators),
-                        15 => spawn_popups.push(PopupType::About {
-                            opened_at: std::time::Instant::now(),
-                        }),
-                        17 => app.running = false,
-                        _ => {}
-                    },
+                    }
+                    3 => {
+                        let default_name = if let Some(path) = &app.current_file {
+                            path.to_string_lossy().into_owned()
+                        } else {
+                            format!("patch-{}.o2", arvelie_neralie())
+                        };
+                        spawn_popups.push(PopupType::Prompt {
+                            purpose: PromptPurpose::SaveAs { quit_after: false },
+                            input: default_name,
+                        });
+                    }
+                    5 => spawn_popups.push(PopupType::Prompt {
+                        purpose: PromptPurpose::SetBpm,
+                        input: app.bpm.to_string(),
+                    }),
+                    6 => spawn_popups.push(PopupType::Prompt {
+                        purpose: PromptPurpose::SetGridSize,
+                        input: format!("{}x{}", app.engine.w, app.engine.h),
+                    }),
+                    7 => spawn_popups.push(PopupType::AutofitMenu { selected: 0 }),
+                    9 => {
+                        let devices = app.get_midi_output_devices();
+                        spawn_popups.push(PopupType::MidiMenu {
+                            selected: 0,
+                            devices,
+                        });
+                    }
+                    11 => spawn_popups.push(PopupType::ClockMenu { selected: 0 }),
+                    13 => spawn_popups.push(PopupType::Controls),
+                    14 => spawn_popups.push(PopupType::Operators),
+                    15 => spawn_popups.push(PopupType::About {
+                        opened_at: std::time::Instant::now(),
+                    }),
+                    17 => {
+                        if app.is_dirty() {
+                            spawn_popups.push(PopupType::ConfirmQuit {
+                                selected: 0,
+                                has_file: app.current_file.is_some(),
+                            });
+                        } else {
+                            app.running = false;
+                        }
+                    }
                     _ => {}
+                },
+                _ => {}
+            },
+            PopupType::MidiMenu { selected, devices } => match key.code {
+                KeyCode::Esc | KeyCode::Left => close_popup = true,
+                KeyCode::Up => *selected = selected.saturating_sub(1),
+                KeyCode::Down => *selected = (*selected + 1).min(devices.len().saturating_sub(1)),
+                KeyCode::Char(' ') => {
+                    app.set_midi_device(*selected);
                 }
-                true
-            }
-            PopupType::MidiMenu { selected, devices } => {
+                KeyCode::Enter | KeyCode::Right => {}
+                _ => {}
+            },
+            PopupType::ConfirmNew { selected } => match key.code {
+                KeyCode::Esc | KeyCode::Left => close_popup = true,
+                KeyCode::Up | KeyCode::Down => *selected = 1 - *selected,
+                KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Right => {
+                    if *selected == 1 {
+                        app.engine.cells.fill('.');
+                        app.history.clear();
+                        app.history.record(&app.engine.cells);
+                        app.history.saved_absolute_index =
+                            Some(app.history.offset + app.history.index);
+                        app.current_file = None;
+                        pop_parent = true;
+                    }
+                    close_popup = true;
+                }
+                _ => {}
+            },
+            PopupType::ConfirmQuit { selected, has_file } => {
+                let options_count = if *has_file { 4 } else { 3 };
                 match key.code {
                     KeyCode::Esc | KeyCode::Left => close_popup = true,
                     KeyCode::Up => *selected = selected.saturating_sub(1),
-                    KeyCode::Down => {
-                        *selected = (*selected + 1).min(devices.len().saturating_sub(1))
-                    }
-                    KeyCode::Char(' ') => {
-                        app.set_midi_device(*selected);
-                    }
-                    KeyCode::Enter | KeyCode::Right => {}
-                    _ => {}
-                }
-                true
-            }
-            PopupType::ConfirmNew { selected } => {
-                match key.code {
-                    KeyCode::Esc | KeyCode::Left => close_popup = true,
-                    KeyCode::Up | KeyCode::Down => *selected = 1 - *selected,
+                    KeyCode::Down => *selected = (*selected + 1).min(options_count - 1),
                     KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Right => {
-                        if *selected == 1 {
-                            app.engine.cells.fill('.');
-                            app.history.clear();
-                            app.history.record(&app.engine.cells);
-                            app.current_file = None;
-                            pop_parent = true;
+                        match (*has_file, *selected) {
+                            (true, 0) => {
+                                if app.current_file.is_some() {
+                                    if app.save() {
+                                        app.running = false;
+                                    } else {
+                                        spawn_popups.push(PopupType::Msg {
+                                            title: "Error".into(),
+                                            text: "Could not save file.".into(),
+                                        });
+                                    }
+                                    close_popup = true;
+                                } else {
+                                    let default_name = format!("patch-{}.o2", arvelie_neralie());
+                                    spawn_popups.push(PopupType::Prompt {
+                                        purpose: PromptPurpose::SaveAs { quit_after: true },
+                                        input: default_name,
+                                    });
+                                }
+                            }
+                            (true, 1) | (false, 0) => {
+                                let default_name = if let Some(path) = &app.current_file {
+                                    path.to_string_lossy().into_owned()
+                                } else {
+                                    format!("patch-{}.o2", arvelie_neralie())
+                                };
+                                spawn_popups.push(PopupType::Prompt {
+                                    purpose: PromptPurpose::SaveAs { quit_after: true },
+                                    input: default_name,
+                                });
+                            }
+                            (true, 2) | (false, 1) => {
+                                app.running = false;
+                                close_popup = true;
+                            }
+                            _ => {
+                                close_popup = true;
+                            }
                         }
-                        close_popup = true;
                     }
                     _ => {}
                 }
-                true
             }
             PopupType::AutofitMenu { selected } => {
                 let mut do_autofit = false;
@@ -466,76 +530,84 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                     }
                     app.resize(new_w.max(1), new_h.max(1));
                 }
-                true
             }
-            PopupType::ClockMenu { selected } => {
-                match key.code {
-                    KeyCode::Esc | KeyCode::Left => close_popup = true,
-                    KeyCode::Up | KeyCode::Down => *selected = 0,
-                    KeyCode::Char(' ') => {
-                        app.midi_bclock = !app.midi_bclock;
-                    }
-                    KeyCode::Enter | KeyCode::Right => {}
-                    _ => {}
+            PopupType::ClockMenu { selected } => match key.code {
+                KeyCode::Esc | KeyCode::Left => close_popup = true,
+                KeyCode::Up | KeyCode::Down => *selected = 0,
+                KeyCode::Char(' ') => {
+                    app.midi_bclock = !app.midi_bclock;
                 }
-                true
-            }
-            PopupType::Prompt { purpose, input } => {
-                match key.code {
-                    KeyCode::Esc => close_popup = true,
-                    KeyCode::Left | KeyCode::Right => {}
-                    KeyCode::Backspace => {
-                        input.pop();
+                KeyCode::Enter | KeyCode::Right => {}
+                _ => {}
+            },
+            PopupType::Prompt { purpose, input } => match key.code {
+                KeyCode::Esc => close_popup = true,
+                KeyCode::Tab => {
+                    if matches!(purpose, PromptPurpose::Open | PromptPurpose::SaveAs { .. })
+                        && let Some(comp) = autocomplete_path(input)
+                    {
+                        input.push_str(&comp);
                     }
-                    KeyCode::Char(c) => input.push(c),
-                    KeyCode::Enter => match purpose {
-                        PromptPurpose::Open => {
-                            if let Ok(content) = std::fs::read_to_string(&*input) {
-                                app.load(&content, Some(input.clone().into()));
-                                let (cols, rows) = crossterm::terminal::size()
-                                    .unwrap_or((app.engine.w as u16, app.engine.h as u16));
-                                app.resize(cols as usize, rows.saturating_sub(2) as usize);
-                                close_popup = true;
-                                pop_parent = true;
+                }
+                KeyCode::Left | KeyCode::Right => {}
+                KeyCode::Backspace => {
+                    input.pop();
+                }
+                KeyCode::Char(c) => input.push(c),
+                KeyCode::Enter => match purpose {
+                    PromptPurpose::Open => {
+                        if let Ok(content) = std::fs::read_to_string(&*input) {
+                            app.load(&content, Some(input.clone().into()));
+                            let (cols, rows) = crossterm::terminal::size()
+                                .unwrap_or((app.engine.w as u16, app.engine.h as u16));
+                            app.resize(cols as usize, rows.saturating_sub(2) as usize);
+                            close_popup = true;
+                            pop_parent = true;
+                        } else {
+                            spawn_popups.push(PopupType::Msg {
+                                title: "Error".into(),
+                                text: format!("Cannot open {}", input),
+                            });
+                        }
+                    }
+                    PromptPurpose::SaveAs { quit_after } => {
+                        app.current_file = Some(input.clone().into());
+                        if app.save() {
+                            close_popup = true;
+                            pop_parent = true;
+                            if *quit_after {
+                                app.running = false;
                             } else {
                                 spawn_popups.push(PopupType::Msg {
-                                    title: "Error".into(),
-                                    text: format!("Cannot open {}", input),
+                                    title: "Saved".into(),
+                                    text: "File saved successfully.".into(),
                                 });
                             }
+                        } else {
+                            spawn_popups.push(PopupType::Msg {
+                                title: "Error".into(),
+                                text: "Could not save file.".into(),
+                            });
                         }
-                        PromptPurpose::SaveAs => {
-                            app.current_file = Some(input.clone().into());
-                            if app.save() {
-                                close_popup = true;
-                                pop_parent = true;
-                            } else {
-                                spawn_popups.push(PopupType::Msg {
-                                    title: "Error".into(),
-                                    text: "Could not save file.".into(),
-                                });
-                            }
+                    }
+                    PromptPurpose::SetBpm => {
+                        if let Ok(b) = input.parse() {
+                            app.set_bpm(b);
                         }
-                        PromptPurpose::SetBpm => {
-                            if let Ok(b) = input.parse() {
-                                app.set_bpm(b);
-                            }
-                            close_popup = true;
+                        close_popup = true;
+                    }
+                    PromptPurpose::SetGridSize => {
+                        let parts: Vec<&str> = input.split('x').collect();
+                        if parts.len() == 2
+                            && let (Ok(w), Ok(h)) = (parts[0].parse(), parts[1].parse())
+                        {
+                            app.resize(w, h);
                         }
-                        PromptPurpose::SetGridSize => {
-                            let parts: Vec<&str> = input.split('x').collect();
-                            if parts.len() == 2
-                                && let (Ok(w), Ok(h)) = (parts[0].parse(), parts[1].parse())
-                            {
-                                app.resize(w, h);
-                            }
-                            close_popup = true;
-                        }
-                    },
-                    _ => {}
-                }
-                true
-            }
+                        close_popup = true;
+                    }
+                },
+                _ => {}
+            },
         };
 
         if !close_popup {
@@ -546,13 +618,21 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
 
         app.popup.extend(spawn_popups);
 
-        if consumed {
-            return;
-        }
+        return;
     }
 
-    let ctrl =
-        key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::META);
+    if ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
+        if app.is_dirty() {
+            app.popup.push(PopupType::ConfirmQuit {
+                selected: 0,
+                has_file: app.current_file.is_some(),
+            });
+        } else {
+            app.running = false;
+        }
+        return;
+    }
+
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
     let alt = key.modifiers.contains(KeyModifiers::ALT);
 
@@ -636,21 +716,23 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
         }
 
         KeyCode::Char('s') | KeyCode::Char('S') if ctrl => {
-            if app.current_file.is_none() {
-                app.current_file = Some(std::path::PathBuf::from(format!(
-                    "patch-{}.o2",
-                    arvelie_neralie()
-                )));
-            }
-            if app.save() {
-                app.popup.push(PopupType::Msg {
-                    title: "o2".into(),
-                    text: "File saved successfully.".into(),
-                });
+            if app.current_file.is_some() {
+                if app.save() {
+                    app.popup.push(PopupType::Msg {
+                        title: "Saved".into(),
+                        text: "File saved successfully.".into(),
+                    });
+                } else {
+                    app.popup.push(PopupType::Msg {
+                        title: "Error".into(),
+                        text: "Could not save file.".into(),
+                    });
+                }
             } else {
-                app.popup.push(PopupType::Msg {
-                    title: "Error".into(),
-                    text: "Could not save file.".into(),
+                let default_name = format!("patch-{}.o2", arvelie_neralie());
+                app.popup.push(PopupType::Prompt {
+                    purpose: PromptPurpose::SaveAs { quit_after: false },
+                    input: default_name,
                 });
             }
         }
@@ -873,4 +955,60 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
         }
         _ => {}
     }
+}
+
+/// Returns the shortest suffix needed to complete `input` to the first
+/// matching filesystem entry, or `None` if there is no match or the input
+/// is already complete.
+///
+/// The completion is prefix-based: the directory portion of `input` is
+/// scanned and the first entry (sorted lexicographically) whose name starts
+/// with the file-name portion of `input` is returned. Hidden entries (names
+/// starting with `'.'`) are skipped unless the prefix itself starts with
+/// `'.'`. A trailing path separator is appended automatically when the
+/// matched entry is a directory.
+///
+/// Used by the [`PopupType::Prompt`] renderer and the Tab key handler to
+/// provide interactive path completion in Open and Save As dialogues.
+pub fn autocomplete_path(input: &str) -> Option<String> {
+    let path = std::path::Path::new(input);
+    let (dir, file_prefix) = if input.is_empty() {
+        (std::path::Path::new("."), "")
+    } else if input.ends_with('/') || input.ends_with(std::path::MAIN_SEPARATOR) {
+        (path, "")
+    } else {
+        let parent = path.parent().unwrap_or(std::path::Path::new(""));
+        let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        let dir = if parent.as_os_str().is_empty() {
+            std::path::Path::new(".")
+        } else {
+            parent
+        };
+        (dir, file_name)
+    };
+
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        let mut matches = Vec::new();
+        for entry in entries.flatten() {
+            if let Ok(name) = entry.file_name().into_string()
+                && name.starts_with(file_prefix)
+            {
+                if file_prefix.is_empty() && name.starts_with('.') {
+                    continue;
+                }
+                matches.push((name, entry.file_type().map(|t| t.is_dir()).unwrap_or(false)));
+            }
+        }
+        matches.sort_by(|a, b| a.0.cmp(&b.0));
+        if let Some((mut name, is_dir)) = matches.into_iter().next() {
+            if is_dir {
+                name.push(std::path::MAIN_SEPARATOR);
+            }
+            let remainder = &name[file_prefix.len()..];
+            if !remainder.is_empty() {
+                return Some(remainder.to_string());
+            }
+        }
+    }
+    None
 }

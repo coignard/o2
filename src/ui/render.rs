@@ -32,13 +32,14 @@
 #![allow(clippy::manual_is_multiple_of)]
 
 use crate::core::app::{EditorState, InputMode, PopupType, PromptPurpose};
-use crate::ui::theme::{BG, F_MED, StyleType};
+use crate::editor::input::autocomplete_path;
+use crate::ui::theme::{B_INV, BG, F_MED, StyleType};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, HorizontalAlignment, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table},
+    widgets::{Block, Cell, Clear, List, ListItem, Paragraph, Row, Table},
 };
 
 fn is_marker(app: &EditorState, x: usize, y: usize) -> bool {
@@ -122,12 +123,9 @@ fn write_ui(row: &mut [UiChar], text: &str, offset: usize, limit: usize, style: 
 /// Popup overlays are drawn last, on top of everything else, using
 /// [`draw_popup_content`].
 pub fn draw(f: &mut Frame, app: &EditorState) {
-    f.render_widget(Block::default().style(Style::default().bg(BG)), f.area());
+    f.render_widget(Block::new().style(Style::new().bg(BG)), f.area());
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(2)])
-        .split(f.area());
+    let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).split(f.area());
 
     let grid_area = chunks[0];
     let status_area = chunks[1];
@@ -143,14 +141,14 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
 
     for y in scroll_y..(scroll_y + visible_h) {
         let mut spans = Vec::new();
-        let mut current_style = Style::default().bg(BG);
+        let mut current_style = Style::new().bg(BG);
         let mut current_text = String::with_capacity(visible_w);
 
         for x in scroll_x..(scroll_x + visible_w) {
             let g = app.glyph_at(x, y);
 
             let (glyph, style) = if is_invisible(app, x, y, g) {
-                (' ', Style::default().bg(BG))
+                (' ', Style::new().bg(BG))
             } else {
                 let is_cursor = x == app.cx && y == app.cy;
                 let marker = is_marker(app, x, y);
@@ -168,7 +166,7 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
                 let theme_type = make_style(app, x, y, display_glyph, selection_glyph);
                 let (fg, bg) = theme_type.colors();
 
-                let mut s = Style::default().bg(bg.unwrap_or(BG));
+                let mut s = Style::new().bg(bg.unwrap_or(BG));
                 if let Some(c) = fg {
                     s = s.fg(c);
                 }
@@ -377,11 +375,11 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
 
     let to_line = |row: &[UiChar]| -> Line {
         let mut spans = Vec::new();
-        let mut current_style = Style::default();
+        let mut current_style = Style::new();
         let mut current_text = String::with_capacity(row.len());
 
         for (i, uc) in row.iter().enumerate() {
-            let style = Style::default().fg(uc.fg).bg(uc.bg);
+            let style = Style::new().fg(uc.fg).bg(uc.bg);
             if i == 0 || style == current_style {
                 current_text.push(uc.c);
             } else {
@@ -431,6 +429,7 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
             (max_len + 4, devices.len().max(1) as u16 + 2)
         }
         PopupType::ConfirmNew { .. } => (22, 4),
+        PopupType::ConfirmQuit { has_file, .. } => (26, if *has_file { 6 } else { 5 }),
         PopupType::AutofitMenu { .. } => (15, 4),
         PopupType::ClockMenu { .. } => (30, 3),
         PopupType::Prompt { .. } => (40, 3),
@@ -467,23 +466,19 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
             r
         }
         _ => {
-            let layout_y = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(area.height.saturating_sub(height) / 2),
-                    Constraint::Length(height.min(area.height)),
-                    Constraint::Min(0),
-                ])
-                .split(area);
+            let layout_y = Layout::vertical([
+                Constraint::Length(area.height.saturating_sub(height) / 2),
+                Constraint::Length(height.min(area.height)),
+                Constraint::Min(0),
+            ])
+            .split(area);
 
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Length(area.width.saturating_sub(width) / 2),
-                    Constraint::Length(width.min(area.width)),
-                    Constraint::Min(0),
-                ])
-                .split(layout_y[1])[1]
+            Layout::horizontal([
+                Constraint::Length(area.width.saturating_sub(width) / 2),
+                Constraint::Length(width.min(area.width)),
+                Constraint::Min(0),
+            ])
+            .split(layout_y[1])[1]
         }
     };
 
@@ -501,7 +496,7 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
 fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, rect: Rect) {
     let bg_color = crate::ui::theme::B_INV;
     let fg_color = crate::ui::theme::BG;
-    let popup_style = Style::default().bg(bg_color).fg(fg_color);
+    let popup_style = Style::new().bg(bg_color).fg(fg_color);
     let bold_style = popup_style.add_modifier(Modifier::BOLD);
 
     f.render_widget(Clear, rect);
@@ -538,7 +533,8 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 .into_iter()
                 .map(|(k, v)| {
                     Row::new(vec![
-                        Cell::from(Line::from(k).alignment(Alignment::Right)).style(popup_style),
+                        Cell::from(Line::from(k).alignment(HorizontalAlignment::Right))
+                            .style(popup_style),
                         Cell::from(Span::styled(
                             if v.is_empty() {
                                 String::new()
@@ -552,12 +548,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 .collect();
 
             let table = Table::new(rows, [Constraint::Length(20), Constraint::Min(30)])
-                .block(
-                    Block::default()
-                        .title(" Controls ")
-                        .borders(Borders::ALL)
-                        .style(popup_style),
-                )
+                .block(Block::bordered().title(" Controls ").style(popup_style))
                 .style(popup_style);
 
             f.render_widget(table, rect);
@@ -611,12 +602,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 .collect();
 
             let table = Table::new(rows, [Constraint::Length(3), Constraint::Min(30)])
-                .block(
-                    Block::default()
-                        .title(" Operators ")
-                        .borders(Borders::ALL)
-                        .style(popup_style),
-                )
+                .block(Block::bordered().title(" Operators ").style(popup_style))
                 .style(popup_style);
 
             f.render_widget(table, rect);
@@ -723,7 +709,8 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
             for line in frame {
                 let line_str = format!("{}{}", pad_str, line);
                 lines.push(
-                    Line::from(Span::styled(line_str, popup_style)).alignment(Alignment::Left),
+                    Line::from(Span::styled(line_str, popup_style))
+                        .alignment(HorizontalAlignment::Left),
                 );
             }
 
@@ -735,12 +722,14 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 "(c) 2026 René Coignard",
                 "(c) 2017-2026 Hundred Rabbits",
             ] {
-                lines
-                    .push(Line::from(Span::styled(text, popup_style)).alignment(Alignment::Center));
+                lines.push(
+                    Line::from(Span::styled(text, popup_style))
+                        .alignment(HorizontalAlignment::Center),
+                );
             }
 
             let p = Paragraph::new(lines)
-                .block(Block::default().borders(Borders::ALL).style(popup_style))
+                .block(Block::bordered().style(popup_style))
                 .style(popup_style);
 
             f.render_widget(p, rect);
@@ -783,12 +772,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 .collect();
 
             let list = List::new(list_items)
-                .block(
-                    Block::default()
-                        .title(" o2 ")
-                        .borders(Borders::ALL)
-                        .style(popup_style),
-                )
+                .block(Block::bordered().title(" o2 ").style(popup_style))
                 .style(popup_style);
 
             f.render_widget(list, rect);
@@ -807,10 +791,31 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                     }
                 })
                 .collect();
+            let list =
+                List::new(list_items).block(Block::bordered().title(" Sure? ").style(popup_style));
+            f.render_widget(list, rect);
+        }
+
+        PopupType::ConfirmQuit { selected, has_file } => {
+            let items = if *has_file {
+                vec!["Save", "Save As...", "Quit Without Saving", "Cancel"]
+            } else {
+                vec!["Save As...", "Quit Without Saving", "Cancel"]
+            };
+            let list_items: Vec<ListItem> = items
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    if i == *selected {
+                        ListItem::new(format!(" > {}", s)).style(bold_style)
+                    } else {
+                        ListItem::new(format!("   {}", s)).style(popup_style)
+                    }
+                })
+                .collect();
             let list = List::new(list_items).block(
-                Block::default()
-                    .title(" Are you sure? ")
-                    .borders(Borders::ALL)
+                Block::bordered()
+                    .title(" Leaving so soon? ")
                     .style(popup_style),
             );
             f.render_widget(list, rect);
@@ -830,9 +835,8 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 })
                 .collect();
             let list = List::new(list_items).block(
-                Block::default()
-                    .title(" Auto-fit Grid ")
-                    .borders(Borders::ALL)
+                Block::bordered()
+                    .title(" Auto-fit ")
                     .style(popup_style),
             );
             f.render_widget(list, rect);
@@ -853,9 +857,8 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 })
                 .collect();
             let list = List::new(list_items).block(
-                Block::default()
+                Block::bordered()
                     .title(" Clock & Timing ")
-                    .borders(Borders::ALL)
                     .style(popup_style),
             );
             f.render_widget(list, rect);
@@ -885,9 +888,8 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
 
             let list = List::new(list_items)
                 .block(
-                    Block::default()
+                    Block::bordered()
                         .title(" PortMidi Device Selection ")
-                        .borders(Borders::ALL)
                         .style(popup_style),
                 )
                 .style(popup_style);
@@ -898,19 +900,42 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
         PopupType::Prompt { purpose, input } => {
             let title = match purpose {
                 PromptPurpose::Open => " Open ",
-                PromptPurpose::SaveAs => " Save As ",
+                PromptPurpose::SaveAs { .. } => " Save As ",
                 PromptPurpose::SetBpm => " Set BPM ",
                 PromptPurpose::SetGridSize => " Set Grid Size ",
             };
 
-            let cursor = if app.engine.f % 2 == 0 { "_" } else { " " };
-            let p = Paragraph::new(format!(" {}{}", input, cursor))
-                .block(
-                    Block::default()
-                        .title(title)
-                        .borders(Borders::ALL)
-                        .style(popup_style),
-                )
+            let autocomplete_str = match purpose {
+                PromptPurpose::Open | PromptPurpose::SaveAs { .. } => {
+                    autocomplete_path(input).unwrap_or_default()
+                }
+                _ => String::new(),
+            };
+
+            let mut spans = vec![Span::styled(format!(" {}", input), popup_style)];
+
+            if !autocomplete_str.is_empty() {
+                let mut chars = autocomplete_str.chars();
+                let first_char = chars.next().unwrap();
+                let rest: String = chars.collect();
+
+                let cursor_style = if app.engine.f % 2 == 0 {
+                    Style::new().fg(B_INV).bg(BG)
+                } else {
+                    Style::new().fg(BG).bg(B_INV)
+                };
+
+                spans.push(Span::styled(first_char.to_string(), cursor_style));
+                if !rest.is_empty() {
+                    spans.push(Span::styled(rest, Style::new().fg(F_MED).bg(B_INV)));
+                }
+            } else {
+                let cursor = if app.engine.f % 2 == 0 { "_" } else { " " };
+                spans.push(Span::styled(cursor.to_string(), popup_style));
+            }
+
+            let p = Paragraph::new(Line::from(spans))
+                .block(Block::bordered().title(title).style(popup_style))
                 .style(popup_style);
             f.render_widget(p, rect);
         }
@@ -922,9 +947,8 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 .collect();
             let p = Paragraph::new(lines)
                 .block(
-                    Block::default()
+                    Block::bordered()
                         .title(format!(" {} ", title))
-                        .borders(Borders::ALL)
                         .style(popup_style),
                 )
                 .style(popup_style);

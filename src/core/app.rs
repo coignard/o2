@@ -58,7 +58,10 @@ pub enum PromptPurpose {
     /// The user is entering a file path to open.
     Open,
     /// The user is entering a file path to save to.
-    SaveAs,
+    SaveAs {
+        /// When `true`, the application exits after the file is saved successfully.
+        quit_after: bool,
+    },
     /// The user is entering a BPM value.
     SetBpm,
     /// The user is entering a new grid size in `WxH` notation.
@@ -103,6 +106,13 @@ pub enum PopupType {
     ClockMenu {
         /// Index of the currently highlighted option (currently always `0`).
         selected: usize,
+    },
+    /// Confirmation dialogue shown when quitting with unsaved changes.
+    ConfirmQuit {
+        /// Index of the currently highlighted option.
+        selected: usize,
+        /// `true` if a file is currently open (adds a "Save" option).
+        has_file: bool,
     },
     /// Single-line text input dialogue.
     Prompt {
@@ -291,6 +301,7 @@ impl EditorState {
         };
         app.calc_bounds();
         app.history.record(&app.engine.cells);
+        app.history.saved_absolute_index = Some(app.history.offset + app.history.index);
         app
     }
 
@@ -395,11 +406,12 @@ impl EditorState {
 
         self.history.clear();
         self.history.record(&self.engine.cells);
+        self.history.saved_absolute_index = Some(self.history.offset + self.history.index);
         self.select(self.cx as isize, self.cy as isize, self.cw, self.ch);
     }
 
     /// Serialises the grid to disk at [`current_file`](EditorState::current_file).
-    pub fn save(&self) -> bool {
+    pub fn save(&mut self) -> bool {
         let path = self
             .current_file
             .clone()
@@ -411,7 +423,18 @@ impl EditorState {
             }
             content.push('\n');
         }
-        std::fs::write(path, content.trim_end()).is_ok()
+        let success = std::fs::write(path, content.trim_end()).is_ok();
+        if success {
+            self.history.saved_absolute_index = Some(self.history.offset + self.history.index);
+        }
+        success
+    }
+
+    /// Returns `true` if there are unsaved changes since the last save or load.
+    pub fn is_dirty(&self) -> bool {
+        self.history
+            .saved_absolute_index
+            .is_none_or(|saved| saved != (self.history.offset + self.history.index))
     }
 
     /// Reverts the grid to the previous history snapshot (Ctrl+Z).
@@ -518,6 +541,7 @@ impl EditorState {
         self.select(self.cx as isize, self.cy as isize, self.cw, self.ch);
         self.history.clear();
         self.history.record(&self.engine.cells);
+        self.history.saved_absolute_index = None;
     }
 
     /// Returns the glyph at `(x, y)`, or `'.'` if the coordinates are out of bounds.

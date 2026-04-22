@@ -37,6 +37,14 @@ pub struct History {
     pub index: usize,
     /// Maximum number of snapshots to retain before discarding the oldest.
     pub limit: usize,
+    /// Number of snapshots that have been evicted from the front of the ring due
+    /// to the [`limit`](History::limit) being exceeded. Used to keep
+    /// `saved_absolute_index` consistent after the ring wraps.
+    pub offset: usize,
+    /// Absolute index (offset + index) of the snapshot that matches the last
+    /// saved file state, or `None` if the file has never been saved or the
+    /// saved snapshot has been evicted from the ring.
+    pub saved_absolute_index: Option<usize>,
 }
 
 impl History {
@@ -56,6 +64,8 @@ impl History {
             frames: VecDeque::with_capacity(32),
             index: 0,
             limit: 100,
+            offset: 0,
+            saved_absolute_index: None,
         }
     }
 
@@ -91,11 +101,17 @@ impl History {
         }
 
         if self.index + 1 < self.frames.len() {
+            if let Some(saved) = self.saved_absolute_index
+                && saved > self.offset + self.index
+            {
+                self.saved_absolute_index = None;
+            }
             self.frames.truncate(self.index + 1);
         }
         self.frames.push_back(cells.to_vec());
         if self.frames.len() > self.limit {
             self.frames.pop_front();
+            self.offset += 1;
         }
         self.index = self.frames.len().saturating_sub(1);
     }
@@ -163,6 +179,8 @@ impl History {
     pub fn clear(&mut self) {
         self.frames.clear();
         self.index = 0;
+        self.offset = 0;
+        self.saved_absolute_index = None;
     }
 }
 
