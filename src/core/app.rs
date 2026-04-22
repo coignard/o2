@@ -128,6 +128,8 @@ pub enum PopupType {
         /// Body text; may contain newlines.
         text: String,
     },
+    /// ROFL COPTER!!!
+    RoflCopter,
 }
 
 /// Core execution engine state. Pure data containing the grid and execution variables.
@@ -247,6 +249,9 @@ pub struct EditorState {
     /// Stack of currently visible overlay screens, rendered front-to-back.
     /// The last element is the topmost (focused) overlay.
     pub popup: Vec<PopupType>,
+
+    /// ROFL BUFFER!!!
+    pub rofl_buffer: String,
 }
 
 impl EditorState {
@@ -298,6 +303,7 @@ impl EditorState {
             midi: MidiState::new(),
             midi_bclock: false,
             popup: Vec::new(),
+            rofl_buffer: String::with_capacity(4),
         };
         app.calc_bounds();
         app.history.record(&app.engine.cells);

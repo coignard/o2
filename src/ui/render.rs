@@ -439,6 +439,7 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
             let h = text.lines().count() as u16 + 2;
             (w, h)
         }
+        PopupType::RoflCopter => (40, 13),
     };
 
     width = width.min(area.width);
@@ -450,6 +451,7 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
             | PopupType::Operators
             | PopupType::About { .. }
             | PopupType::Msg { .. }
+            | PopupType::RoflCopter
     );
 
     let mut rect = match prev_rect {
@@ -834,11 +836,8 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                     }
                 })
                 .collect();
-            let list = List::new(list_items).block(
-                Block::bordered()
-                    .title(" Auto-fit ")
-                    .style(popup_style),
-            );
+            let list = List::new(list_items)
+                .block(Block::bordered().title(" Auto-fit ").style(popup_style));
             f.render_widget(list, rect);
         }
 
@@ -952,6 +951,58 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                         .style(popup_style),
                 )
                 .style(popup_style);
+            f.render_widget(p, rect);
+        }
+
+        PopupType::RoflCopter => {
+            const FRAME_0: &[&str] = &[
+                "      ROFL:ROFL:LOL:              ",
+                "           ______|____            ",
+                "      LOL===        []\\          ",
+                "            \\          \\        ",
+                "             \\_________ ]        ",
+                "                I   I             ",
+                "             -------------/       ",
+                "                                  ",
+                "             ROFL COPTER!!!       ",
+            ];
+
+            const FRAME_1: &[&str] = &[
+                "               :LOL:ROFL:ROFL     ",
+                "       L   ______|____            ",
+                "       O ===        []\\          ",
+                "       L    \\          \\        ",
+                "             \\_________ ]        ",
+                "                I   I             ",
+                "             -------------/       ",
+                "                                  ",
+                "             ROFL COPTER!!!       ",
+            ];
+
+            let frame = if app.engine.f % 2 == 0 {
+                FRAME_0
+            } else {
+                FRAME_1
+            };
+
+            let mut lines = Vec::with_capacity(11);
+            lines.push(Line::from(""));
+
+            for &line in frame {
+                lines.push(
+                    Line::from(vec![
+                        Span::styled(" ", popup_style),
+                        Span::styled(line, popup_style),
+                    ])
+                    .alignment(HorizontalAlignment::Left),
+                );
+            }
+            lines.push(Line::from(""));
+
+            let p = Paragraph::new(lines)
+                .block(Block::bordered().style(popup_style))
+                .style(popup_style);
+
             f.render_widget(p, rect);
         }
     }

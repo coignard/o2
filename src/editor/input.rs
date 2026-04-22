@@ -207,7 +207,8 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                 PopupType::Controls
                 | PopupType::Operators
                 | PopupType::About { .. }
-                | PopupType::Msg { .. } => {
+                | PopupType::Msg { .. }
+                | PopupType::RoflCopter => {
                     if let MouseEventKind::Down(MouseButton::Left) = mouse_event.kind {
                         pop_current = true;
                     }
@@ -340,7 +341,8 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
             PopupType::Controls
             | PopupType::Operators
             | PopupType::About { .. }
-            | PopupType::Msg { .. } => {
+            | PopupType::Msg { .. }
+            | PopupType::RoflCopter => {
                 if matches!(
                     key.code,
                     KeyCode::Esc
@@ -709,6 +711,12 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
     let leap_x = app.grid_w as isize;
     let leap_y = app.grid_h as isize;
 
+    let is_char =
+        matches!(key.code, KeyCode::Char(c) if !ctrl && !alt && EditorState::is_allowed(c));
+    if !is_char {
+        app.rofl_buffer.clear();
+    }
+
     match key.code {
         KeyCode::Esc => {
             app.select(app.cx as isize, app.cy as isize, 0, 0);
@@ -952,6 +960,27 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
         }
         KeyCode::Char(c) if !ctrl && !alt && EditorState::is_allowed(c) => {
             app.write_cursor(c);
+
+            if app.mode == InputMode::Append {
+                match (app.rofl_buffer.as_str(), c.to_ascii_lowercase()) {
+                    (_, 'r') => {
+                        app.rofl_buffer.clear();
+                        app.rofl_buffer.push('r');
+                    }
+                    ("r", 'o') => app.rofl_buffer.push('o'),
+                    ("ro", 'f') => app.rofl_buffer.push('f'),
+                    ("rof", 'l') => {
+                        app.rofl_buffer.clear();
+
+                        if app.bpm == 360 && !app.paused {
+                            app.popup.push(PopupType::RoflCopter);
+                        }
+                    }
+                    _ => app.rofl_buffer.clear(),
+                }
+            } else {
+                app.rofl_buffer.clear();
+            }
         }
         _ => {}
     }
