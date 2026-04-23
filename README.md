@@ -57,10 +57,15 @@ Or add the following line to your `Cargo.toml`:
 o2-rs = "0.1.0"
 ```
 
-## Todo
+## Extensions
 
-- [ ] OSC/UDP support
-- [ ] MIDI input support
+O₂ extends the original ORCΛ operator set with one additional glyph.
+
+The `&` character is valid in the length port of the MIDI (`:`) and Mono (` % `) operators. It creates a note with no scheduled Note Off: the note sustains indefinitely until explicitly killed or replaced.
+
+```
+:41C.&
+```
 
 ## Test
 
