@@ -117,3 +117,14 @@ impl StyleType {
         }
     }
 }
+
+pub const fn darken(color: Color, percent: u16) -> Color {
+    match color {
+        Color::Rgb(r, g, b) => Color::Rgb(
+            ((r as u16 * percent) / 100) as u8,
+            ((g as u16 * percent) / 100) as u8,
+            ((b as u16 * percent) / 100) as u8,
+        ),
+        _ => color,
+    }
+}

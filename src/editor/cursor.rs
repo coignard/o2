@@ -270,7 +270,7 @@ impl EditorState {
                 self.write_silent(self.min_x, y, c);
                 self.write_silent(self.max_x, y, c);
             } else {
-                // NB: original Orca implementation has a bug with single
+                // NB: original ORCΛ implementation has a bug with single
                 // character selection, this is fixed here
                 self.write_silent(self.min_x, y, c);
             }

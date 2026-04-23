@@ -120,6 +120,8 @@ pub enum PopupType {
         purpose: PromptPurpose,
         /// Text the user has typed so far.
         input: String,
+        /// Current cursor index in the input string.
+        cursor: usize,
     },
     /// Generic informational or error message overlay.
     Msg {

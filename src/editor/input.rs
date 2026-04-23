@@ -285,16 +285,32 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
             app.mouse_from = None;
         }
         MouseEventKind::ScrollUp => {
-            app.move_cursor(0, 1);
+            if app.mode == InputMode::Slide {
+                app.drag(0, 1);
+            } else {
+                app.move_cursor(0, 1);
+            }
         }
         MouseEventKind::ScrollDown => {
-            app.move_cursor(0, -1);
+            if app.mode == InputMode::Slide {
+                app.drag(0, -1);
+            } else {
+                app.move_cursor(0, -1);
+            }
         }
         MouseEventKind::ScrollLeft => {
-            app.move_cursor(-1, 0);
+            if app.mode == InputMode::Slide {
+                app.drag(-1, 0);
+            } else {
+                app.move_cursor(-1, 0);
+            }
         }
         MouseEventKind::ScrollRight => {
-            app.move_cursor(1, 0);
+            if app.mode == InputMode::Slide {
+                app.drag(1, 0);
+            } else {
+                app.move_cursor(1, 0);
+            }
         }
         _ => {}
     }
@@ -390,6 +406,7 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                     1 => spawn_popups.push(PopupType::Prompt {
                         purpose: PromptPurpose::Open,
                         input: String::new(),
+                        cursor: 0,
                     }),
                     2 => {
                         if app.current_file.is_some() {
@@ -408,6 +425,7 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                             let default_name = format!("patch-{}.o2", arvelie_neralie());
                             spawn_popups.push(PopupType::Prompt {
                                 purpose: PromptPurpose::SaveAs { quit_after: false },
+                                cursor: default_name.chars().count(),
                                 input: default_name,
                             });
                         }
@@ -420,17 +438,26 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                         };
                         spawn_popups.push(PopupType::Prompt {
                             purpose: PromptPurpose::SaveAs { quit_after: false },
+                            cursor: default_name.chars().count(),
                             input: default_name,
                         });
                     }
-                    5 => spawn_popups.push(PopupType::Prompt {
-                        purpose: PromptPurpose::SetBpm,
-                        input: app.bpm.to_string(),
-                    }),
-                    6 => spawn_popups.push(PopupType::Prompt {
-                        purpose: PromptPurpose::SetGridSize,
-                        input: format!("{}x{}", app.engine.w, app.engine.h),
-                    }),
+                    5 => {
+                        let val = app.bpm.to_string();
+                        spawn_popups.push(PopupType::Prompt {
+                            purpose: PromptPurpose::SetBpm,
+                            cursor: val.chars().count(),
+                            input: val,
+                        });
+                    }
+                    6 => {
+                        let val = format!("{}x{}", app.engine.w, app.engine.h);
+                        spawn_popups.push(PopupType::Prompt {
+                            purpose: PromptPurpose::SetGridSize,
+                            cursor: val.chars().count(),
+                            input: val,
+                        });
+                    }
                     7 => spawn_popups.push(PopupType::AutofitMenu { selected: 0 }),
                     9 => {
                         let devices = app.get_midi_output_devices();
@@ -515,6 +542,7 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                                     let default_name = format!("patch-{}.o2", arvelie_neralie());
                                     spawn_popups.push(PopupType::Prompt {
                                         purpose: PromptPurpose::SaveAs { quit_after: true },
+                                        cursor: default_name.chars().count(),
                                         input: default_name,
                                     });
                                 }
@@ -527,6 +555,7 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                                 };
                                 spawn_popups.push(PopupType::Prompt {
                                     purpose: PromptPurpose::SaveAs { quit_after: true },
+                                    cursor: default_name.chars().count(),
                                     input: default_name,
                                 });
                             }
@@ -575,20 +604,58 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                 KeyCode::Enter | KeyCode::Right => {}
                 _ => {}
             },
-            PopupType::Prompt { purpose, input } => match key.code {
+            PopupType::Prompt {
+                purpose,
+                input,
+                cursor,
+            } => match key.code {
                 KeyCode::Esc => close_popup = true,
                 KeyCode::Tab => {
                     if matches!(purpose, PromptPurpose::Open | PromptPurpose::SaveAs { .. })
                         && let Some(comp) = autocomplete_path(input)
                     {
                         input.push_str(&comp);
+                        *cursor = input.chars().count();
                     }
                 }
-                KeyCode::Left | KeyCode::Right => {}
-                KeyCode::Backspace => {
-                    input.pop();
+                KeyCode::Left => {
+                    *cursor = cursor.saturating_sub(1);
                 }
-                KeyCode::Char(c) => input.push(c),
+                KeyCode::Right => {
+                    *cursor = (*cursor + 1).min(input.chars().count());
+                }
+                KeyCode::Home => {
+                    *cursor = 0;
+                }
+                KeyCode::End => {
+                    *cursor = input.chars().count();
+                }
+                KeyCode::Backspace => {
+                    if *cursor > 0 {
+                        *cursor -= 1;
+                        let byte_idx = input
+                            .char_indices()
+                            .nth(*cursor)
+                            .map(|(i, _)| i)
+                            .unwrap_or(input.len());
+                        input.remove(byte_idx);
+                    }
+                }
+                KeyCode::Delete => {
+                    if *cursor < input.chars().count() {
+                        let byte_idx = input.char_indices().nth(*cursor).map(|(i, _)| i).unwrap();
+                        input.remove(byte_idx);
+                    }
+                }
+                KeyCode::Char(c) => {
+                    let byte_idx = input
+                        .char_indices()
+                        .nth(*cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(input.len());
+                    input.insert(byte_idx, c);
+                    *cursor += 1;
+                }
                 KeyCode::Enter => match purpose {
                     PromptPurpose::Open => {
                         if let Ok(content) = std::fs::read_to_string(&*input) {
@@ -763,6 +830,7 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
                 let default_name = format!("patch-{}.o2", arvelie_neralie());
                 app.popup.push(PopupType::Prompt {
                     purpose: PromptPurpose::SaveAs { quit_after: false },
+                    cursor: default_name.chars().count(),
                     input: default_name,
                 });
             }

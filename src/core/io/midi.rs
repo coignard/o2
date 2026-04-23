@@ -27,7 +27,7 @@ pub struct MidiNote {
     pub channel: u8,
     /// Base octave used when calculating the note ID.
     pub octave: u8,
-    /// The Orca note glyph that was used to create this note.
+    /// The ORCΛ note glyph that was used to create this note.
     pub note: char,
     /// Resolved MIDI note number (0..127).
     pub note_id: u8,

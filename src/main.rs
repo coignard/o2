@@ -153,6 +153,7 @@ fn restore_terminal() {
     let _ = disable_raw_mode();
     let _ = execute!(
         io::stdout(),
+        crossterm::style::ResetColor,
         LeaveAlternateScreen,
         DisableMouseCapture,
         DisableBracketedPaste,
@@ -225,6 +226,7 @@ fn run_app(
         if event::poll(timeout)? {
             match event::read()? {
                 Event::Resize(cols, rows) => {
+                    terminal.clear()?;
                     let new_w = (cols as usize).max(app.engine.w);
                     let new_h = (rows.saturating_sub(2) as usize).max(app.engine.h);
                     app.resize(new_w, new_h);
@@ -322,7 +324,8 @@ fn main() -> Result<()> {
         io::stdout(),
         EnterAlternateScreen,
         EnableMouseCapture,
-        EnableBracketedPaste
+        EnableBracketedPaste,
+        crossterm::cursor::Hide
     )?;
 
     let _guard = TerminalGuard;

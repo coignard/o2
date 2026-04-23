@@ -30,7 +30,7 @@
 //!
 //! # Clock model
 //!
-//! The Orca engine runs at four ticks per beat (quarter note).  MIDI Beat
+//! The ORCΛ engine runs at four ticks per beat (quarter note).  MIDI Beat
 //! Clock (24 PPQN) is sent at six sub-ticks per engine tick, giving 24 clock
 //! pulses per beat as required by the MIDI specification.  Both streams share
 //! the same phase-locked counter so they remain aligned regardless of system

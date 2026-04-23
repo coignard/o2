@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Note transposition table: maps Orca glyphs to MIDI note IDs.
+//! Note transposition table: maps ORCΛ glyphs to MIDI note IDs.
 //!
 //! The mapping is implemented as a `match` expression for zero-allocation,
 //! branch-table-friendly performance.
@@ -26,7 +26,7 @@
 //! offset. Lowercase letters indicate sharps (e.g. `c` = C#, `d` = D#).
 //! The resulting MIDI ID is clamped to `[0, 127]`.
 
-/// Converts an Orca note glyph and a base octave to a MIDI note ID.
+/// Converts an ORCΛ note glyph and a base octave to a MIDI note ID.
 ///
 /// Returns `None` for glyphs that do not represent a note (digits, `'.'`, `'*'`,
 /// etc.). The `base_octave` value is clamped so that the final MIDI ID stays

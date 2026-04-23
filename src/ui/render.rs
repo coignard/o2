@@ -33,7 +33,7 @@
 
 use crate::core::app::{EditorState, InputMode, PopupType, PromptPurpose};
 use crate::editor::input::autocomplete_path;
-use crate::ui::theme::{B_INV, BG, F_MED, StyleType};
+use crate::ui::theme::{darken, B_INV, BG, F_MED, StyleType};
 use ratatui::{
     Frame,
     layout::{Constraint, HorizontalAlignment, Layout, Rect},
@@ -110,7 +110,7 @@ fn write_ui(row: &mut [UiChar], text: &str, offset: usize, limit: usize, style: 
 ///
 /// The terminal area is divided into two vertical sections:
 ///
-/// 1. **Grid area** -- the scrollable Orca grid, rendered as a [`Paragraph`]
+/// 1. **Grid area** -- the scrollable ORCΛ grid, rendered as a [`Paragraph`]
 ///    of styled [`Span`]s.  Consecutive cells that share the same style are
 ///    merged into a single span for efficiency.
 /// 2. **Status area** -- two fixed rows at the bottom of the screen.  The
@@ -458,15 +458,18 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
             r
         }
         _ => {
+            let vertical_margin = area.height.saturating_sub(height) / 2;
+            let horizontal_margin = area.width.saturating_sub(width) / 2;
+
             let layout_y = Layout::vertical([
-                Constraint::Length(area.height.saturating_sub(height) / 2),
+                Constraint::Length(vertical_margin),
                 Constraint::Length(height.min(area.height)),
                 Constraint::Min(0),
             ])
             .split(area);
 
             Layout::horizontal([
-                Constraint::Length(area.width.saturating_sub(width) / 2),
+                Constraint::Length(horizontal_margin),
                 Constraint::Length(width.min(area.width)),
                 Constraint::Min(0),
             ])
@@ -790,9 +793,9 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
 
         PopupType::ConfirmQuit { selected, has_file } => {
             let items = if *has_file {
-                vec!["Save", "Save As...", "Quit Without Saving", "Cancel"]
+                vec!["Save", "Save As...", "Yes, do as I say!", "Cancel"]
             } else {
-                vec!["Save As...", "Quit Without Saving", "Cancel"]
+                vec!["Save As...", "Yes, do as I say!", "Cancel"]
             };
             let list_items: Vec<ListItem> = items
                 .iter()
@@ -886,7 +889,11 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
             f.render_widget(list, rect);
         }
 
-        PopupType::Prompt { purpose, input } => {
+        PopupType::Prompt {
+            purpose,
+            input,
+            cursor,
+        } => {
             let title = match purpose {
                 PromptPurpose::Open => " Open ",
                 PromptPurpose::SaveAs { .. } => " Save As ",
@@ -901,26 +908,46 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 _ => String::new(),
             };
 
-            let mut spans = vec![Span::styled(format!(" {}", input), popup_style)];
+            let mut spans = vec![Span::styled(" ", popup_style)];
+            let mut chars = input.chars().peekable();
+            let mut i = 0;
 
-            if !autocomplete_str.is_empty() {
-                let mut chars = autocomplete_str.chars();
-                let first_char = chars.next().unwrap();
-                let rest: String = chars.collect();
-
-                let cursor_style = if app.engine.f % 2 == 0 {
-                    Style::new().fg(B_INV).bg(BG)
-                } else {
-                    Style::new().fg(BG).bg(B_INV)
-                };
-
-                spans.push(Span::styled(first_char.to_string(), cursor_style));
-                if !rest.is_empty() {
-                    spans.push(Span::styled(rest, Style::new().fg(F_MED).bg(B_INV)));
-                }
+            let blink = app.engine.f % 2 == 0;
+            let cursor_style = if blink {
+                Style::new().fg(B_INV).bg(BG)
             } else {
-                let cursor = if app.engine.f % 2 == 0 { "_" } else { " " };
-                spans.push(Span::styled(cursor.to_string(), popup_style));
+                Style::new().fg(BG).bg(B_INV)
+            };
+
+            while let Some(c) = chars.next() {
+                if i == *cursor {
+                    spans.push(Span::styled(c.to_string(), cursor_style));
+                } else {
+                    spans.push(Span::styled(c.to_string(), popup_style));
+                }
+                i += 1;
+            }
+
+            let ac_color = darken(B_INV, 60);
+
+            if *cursor == input.chars().count() {
+                if !autocomplete_str.is_empty() {
+                    let mut ac_chars = autocomplete_str.chars();
+                    let first_char = ac_chars.next().unwrap();
+                    let rest: String = ac_chars.collect();
+
+                    spans.push(Span::styled(first_char.to_string(), cursor_style));
+                    if !rest.is_empty() {
+                        spans.push(Span::styled(rest, Style::new().fg(ac_color).bg(B_INV)));
+                    }
+                } else {
+                    spans.push(Span::styled(" ", cursor_style));
+                }
+            } else if !autocomplete_str.is_empty() {
+                spans.push(Span::styled(
+                    autocomplete_str,
+                    Style::new().fg(ac_color).bg(B_INV),
+                ));
             }
 
             let p = Paragraph::new(Line::from(spans))
