@@ -1,6 +1,8 @@
 # O₂
 
-Rust port of the ORCΛ esoteric programming language and terminal livecoding environment. Batteries included.
+Rust port of the ORCΛ esoteric programming language and terminal livecoding environment.
+
+Batteries included.
 
 [![CI](https://github.com/coignard/o2/workflows/CI/badge.svg)](https://github.com/coignard/o2/actions)
 [![CodeQL](https://github.com/coignard/o2/workflows/CodeQL/badge.svg)](https://github.com/coignard/o2/security/code-scanning)
