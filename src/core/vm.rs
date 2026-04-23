@@ -610,7 +610,7 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
         let len_g = app.listen(x, y, 5, 0);
 
         let is_note_off = len_g == '0';
-        let is_tied = len_g == '&';
+        let is_tied = len_g == '_'; // NB: represents an elongated/held note (similar to TidalCycles notation)
 
         let length = if is_tied {
             usize::MAX
@@ -623,32 +623,24 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
 
         if let Some(note_id) = transpose(note_g, octave as i32) {
             let is_mono = g == '%';
-
-            let midi = &mut app.midi;
-            let out_ref = &mut midi.out;
-            let mono_stack = &mut midi.mono_stack;
-            let stack = &mut midi.stack;
+            let mut kill_notes = Vec::new();
 
             if is_note_off {
                 if is_mono {
-                    if let Some(existing) = &mut mono_stack[channel] {
-                        if existing.is_played
-                            && let Some(conn) = out_ref.as_mut()
-                        {
-                            let _ = conn.send(&[0x80 + existing.channel, existing.note_id, 0]);
+                    if let Some(existing) = &mut app.midi.mono_stack[channel] {
+                        if existing.is_played {
+                            kill_notes.push([0x80 + existing.channel, existing.note_id, 0]);
                         }
-                        mono_stack[channel] = None;
+                        app.midi.mono_stack[channel] = None;
                     }
                 } else {
-                    stack.retain_mut(|note| {
+                    app.midi.stack.retain_mut(|note| {
                         if note.channel == channel as u8
                             && note.octave == octave as u8
                             && note.note == note_g
                         {
-                            if note.is_played
-                                && let Some(conn) = out_ref.as_mut()
-                            {
-                                let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
+                            if note.is_played {
+                                kill_notes.push([0x80 + note.channel, note.note_id, 0]);
                             }
                             false
                         } else {
@@ -656,66 +648,65 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
                         }
                     });
                 }
-                return;
+            } else {
+                let new_note = MidiNote {
+                    channel: channel as u8,
+                    octave: octave as u8,
+                    note: note_g,
+                    note_id,
+                    velocity,
+                    length,
+                    is_played: false,
+                };
+
+                if is_mono {
+                    let mut skip_note_on = false;
+
+                    if let Some(existing) = &mut app.midi.mono_stack[channel] {
+                        if is_tied && existing.note == note_g && existing.octave == octave as u8 {
+                            existing.length = length;
+                            skip_note_on = true;
+                        } else {
+                            if existing.is_played {
+                                kill_notes.push([0x80 + existing.channel, existing.note_id, 0]);
+                            }
+                        }
+                    }
+
+                    if !skip_note_on {
+                        app.midi.mono_stack[channel] = Some(new_note);
+                    }
+                } else {
+                    let mut skip_note_on = false;
+
+                    app.midi.stack.retain_mut(|note| {
+                        if note.channel == channel as u8
+                            && note.octave == octave as u8
+                            && note.note == note_g
+                        {
+                            if is_tied {
+                                note.length = length;
+                                skip_note_on = true;
+                                true
+                            } else {
+                                if note.is_played {
+                                    kill_notes.push([0x80 + note.channel, note.note_id, 0]);
+                                }
+                                false
+                            }
+                        } else {
+                            true
+                        }
+                    });
+
+                    if !skip_note_on {
+                        app.midi.stack.push(new_note);
+                    }
+                }
             }
 
-            let new_note = MidiNote {
-                channel: channel as u8,
-                octave: octave as u8,
-                note: note_g,
-                note_id,
-                velocity,
-                length,
-                is_played: false,
-            };
-
-            if is_mono {
-                let mut skip_note_on = false;
-
-                if let Some(existing) = &mut mono_stack[channel] {
-                    if is_tied && existing.note == note_g && existing.octave == octave as u8 {
-                        existing.length = length;
-                        skip_note_on = true;
-                    } else {
-                        if existing.is_played
-                            && let Some(conn) = out_ref.as_mut()
-                        {
-                            let _ = conn.send(&[0x80 + existing.channel, existing.note_id, 0]);
-                        }
-                    }
-                }
-
-                if !skip_note_on {
-                    mono_stack[channel] = Some(new_note);
-                }
-            } else {
-                let mut skip_note_on = false;
-
-                stack.retain_mut(|note| {
-                    if note.channel == channel as u8
-                        && note.octave == octave as u8
-                        && note.note == note_g
-                    {
-                        if is_tied {
-                            note.length = length;
-                            skip_note_on = true;
-                            true
-                        } else {
-                            if note.is_played
-                                && let Some(conn) = out_ref.as_mut()
-                            {
-                                let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
-                            }
-                            false
-                        }
-                    } else {
-                        true
-                    }
-                });
-
-                if !skip_note_on {
-                    stack.push(new_note);
-                }
+            for msg in kill_notes {
+                app.midi.send_midi_msg(&msg);
             }
         }
     });
@@ -815,7 +806,7 @@ fn op_osc(ctx: &mut VmContext) {
                 }
                 msg.push(g);
             }
-            app.midi.osc_stack.push((path_g.to_string(), msg));
+            app.midi.osc.stack.push((path_g.to_string(), msg));
         }
     });
 }
@@ -841,7 +832,7 @@ fn op_udp(ctx: &mut VmContext) {
             msg.push(g);
         }
         if !msg.is_empty() {
-            app.midi.udp_stack.push(msg);
+            app.midi.udp.stack.push(msg);
         }
     });
 }
@@ -1183,8 +1174,8 @@ mod tests {
 
         assert_eq!(app.midi.stack.len(), 1);
         assert_eq!(app.midi.cc_stack.len(), 2);
-        assert_eq!(app.midi.osc_stack.len(), 1);
-        assert_eq!(app.midi.udp_stack.len(), 1);
+        assert_eq!(app.midi.osc.stack.len(), 1);
+        assert_eq!(app.midi.udp.stack.len(), 1);
         assert!(app.midi.mono_stack[0].is_some());
     }
 
@@ -1296,7 +1287,7 @@ mod tests {
     #[test]
     fn test_midi_kill_note() {
         let mut app = EditorState::new(10, 10, 42, 100);
-        app.load(":03C.&\n*.....", None);
+        app.load(":03C._\n*.....", None);
         app.operate();
         assert_eq!(app.midi.stack.len(), 1);
 
@@ -1310,7 +1301,7 @@ mod tests {
     fn test_midi_tied_note_sustain_and_retrigger_prevention() {
         let mut app = EditorState::new(10, 10, 42, 100);
 
-        app.load(":03C.&\n*.....", None);
+        app.load(":03C._\n*.....", None);
         app.operate();
 
         assert_eq!(app.midi.stack.len(), 1);
@@ -1331,13 +1322,13 @@ mod tests {
     #[test]
     fn test_midi_mono_legato_transition() {
         let mut app = EditorState::new(10, 10, 42, 100);
-        app.load("%03C.&\n*.....", None);
+        app.load("%03C._\n*.....", None);
         app.operate();
 
         assert!(app.midi.mono_stack[0].is_some());
         assert_eq!(app.midi.mono_stack[0].unwrap().note_id, 60);
 
-        app.load("%03D.&\n*.....", None);
+        app.load("%03D._\n*.....", None);
         app.operate();
 
         assert!(app.midi.mono_stack[0].is_some());
@@ -1347,7 +1338,7 @@ mod tests {
     #[test]
     fn test_midi_tied_interrupted_by_normal_note() {
         let mut app = EditorState::new(10, 10, 42, 100);
-        app.load(":03C.&\n*.....", None);
+        app.load(":03C._\n*.....", None);
         app.operate();
 
         app.load(":03C.5\n*.....", None);

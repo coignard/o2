@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.1
+
+### Added
+- OSC and UDP output extracted into dedicated `Osc` and `Udp` structs under `core/io`
+- `send_midi_msg()` method on `MidiState` centralising all outgoing MIDI dispatch
+- Plogue Bidule support: `--osc-midi-bidule` CLI flag mirrors outgoing MIDI as OSC packets to a configurable path
+- `ip:` commander command to set the destination IP address for OSC and UDP output
+- `osc:` commander command to set the OSC output port
+- Tied note operator `_` for infinite sustain via `usize::MAX` length with `saturating_sub` decay
+- Explicit note kill via length `0` in the `:` and `%` operators
+- Retrigger prevention for already-playing tied notes to avoid restarting the attack envelope
+
+### Changed
+- `osc_stack` and `udp_stack` fields on `MidiState` replaced by `osc: Osc` and `udp: Udp`
+- `udp_port` field replaced by `ip: String` and per-protocol port fields on `Osc`/`Udp`
+- Note Off messages in `op_midi_mono` now collected and dispatched through `send_midi_msg()` instead of writing directly to the connection
+- Note length clamp corrected from 32 to 35 to cover the full base-36 range
+
 ## 0.1.0
 
 ### Added

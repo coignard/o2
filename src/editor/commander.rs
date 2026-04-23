@@ -52,7 +52,9 @@ use crate::core::app::EditorState;
 /// | `time`   | `ti`  | Write elapsed time as `MMSS`   |
 /// | `cc`     |  --   | Set CC knob offset             |
 /// | `pg`     |  --   | Send Program Change            |
+/// | `osc`    |  --   | Set OSC output port            |
 /// | `udp`    |  --   | Set UDP output port            |
+/// | `ip`     |  --   | Set destination IP address     |
 /// | `copy`   | `co`  | Copy selection to clipboard    |
 /// | `paste`  | `pa`  | Paste from clipboard           |
 /// | `erase`  | `er`  | Erase selection                |
@@ -183,13 +185,24 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                 app.midi.send_pg(channel, bank, sub, pgm);
             }
         }
+        "osc" => {
+            let p: Vec<&str> = value.split(';').collect();
+            if !p.is_empty()
+                && let Ok(v) = p[0].parse::<u16>()
+            {
+                app.midi.osc.port = v;
+            }
+        }
         "udp" => {
             let p: Vec<&str> = value.split(';').collect();
             if !p.is_empty()
                 && let Ok(v) = p[0].parse::<u16>()
             {
-                app.midi.udp_port = v;
+                app.midi.udp.port = v;
             }
+        }
+        "ip" if !value.is_empty() => {
+            app.midi.ip = value.to_string();
         }
         "copy" | "co" => app.copy(),
         "paste" | "pa" => app.paste(),
@@ -408,7 +421,13 @@ mod tests {
         assert_eq!(app.midi.cc_offset, 12);
 
         run_command(&mut app, "udp:12345", None);
-        assert_eq!(app.midi.udp_port, 12345);
+        assert_eq!(app.midi.udp.port, 12345);
+
+        run_command(&mut app, "osc:9000", None);
+        assert_eq!(app.midi.osc.port, 9000);
+
+        run_command(&mut app, "ip:192.168.1.100", None);
+        assert_eq!(app.midi.ip, "192.168.1.100");
     }
 
     #[test]

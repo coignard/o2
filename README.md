@@ -54,17 +54,17 @@ cargo add o2-rs
 Or add the following line to your `Cargo.toml`:
 
 ```toml
-o2-rs = "0.1.0"
+o2-rs = "0.1.1"
 ```
 
 ## Extensions
 
 O₂ extends the original ORCΛ operator set with one additional glyph.
 
-The `&` character is valid in the length port of the MIDI (`:`) and Mono (` % `) operators. It creates a note with no scheduled Note Off.
+The `_` character is valid in the length port of the MIDI (`:`) and Mono (` % `) operators. It creates a note with no scheduled Note Off.
 
 ```
-:41C.&
+:41C._
 ```
 
 An explicit Note Off event can be sent with:

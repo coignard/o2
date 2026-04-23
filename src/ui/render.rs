@@ -290,7 +290,7 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
         );
         write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input);
     } else {
-        write_ui(&mut ui_l2, "v0.1.0", 0, gw, StyleType::Input);
+        write_ui(&mut ui_l2, "v0.1.1", 0, gw, StyleType::Input);
         write_ui(
             &mut ui_l2,
             &format!("{}x{}", app.engine.w, app.engine.h),
@@ -504,7 +504,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 ("Ctrl+D or F1", "Open Main Menu"),
                 ("Ctrl+K", "Toggle Commander"),
                 ("0-9, A-Z, a-z,", "Insert Character"),
-                ("! : % / = # *", ""),
+                ("! : % = ; ? # * _", ""),
                 ("Spacebar", "Play/Pause"),
                 ("Ctrl+Z or Ctrl+U", "Undo"),
                 ("Ctrl+X", "Cut"),
@@ -519,7 +519,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 ("Alt+Arrow Keys", "Slide Selection"),
                 ("` (grave) or ~", "Slide Selection Mode"),
                 ("Escape", "Normal Mode/Deselect"),
-                ("( ) _ + [ ] { }", "Adjust Grid Size and Rulers"),
+                ("( ) - + [ ] { }", "Adjust Grid Size and Rulers"),
                 ("< and >", "Adjust BPM"),
                 ("?", "Controls (this message)"),
             ];

@@ -15,6 +15,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+/// MIDI output, note stacks, CC/PB messages, OSC, and UDP.
 pub mod midi;
 
+/// OSC output: packet encoding and per-tick dispatch.
+pub mod osc;
+
+/// UDP output: raw datagram dispatch.
+pub mod udp;
+
 pub use midi::{MidiCc, MidiMessage, MidiNote, MidiPb, MidiState};
+pub use osc::Osc;
+pub use udp::Udp;

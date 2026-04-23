@@ -127,6 +127,12 @@ struct Cli {
     #[arg(long, help_heading = "OSC/MIDI options", verbatim_doc_comment)]
     strict_timing: bool,
 
+    /// Set MIDI to be sent via OSC formatted for Plogue Bidule.
+    /// The path argument is the path of the Plogue OSC MIDI device.
+    /// Example: /OSC_MIDI_0/MIDI
+    #[arg(long, help_heading = "OSC/MIDI options", verbatim_doc_comment)]
+    osc_midi_bidule: Option<String>,
+
     #[arg(value_name = "file", hide = true)]
     file: Option<PathBuf>,
 }
@@ -343,6 +349,7 @@ fn main() -> Result<()> {
 
     let mut app = EditorState::new(term_w, term_h, cli.seed, cli.undo_limit);
     app.set_bpm(cli.bpm);
+    app.midi.osc_midi_bidule = cli.osc_midi_bidule.clone();
 
     if let Some(path) = &cli.file
         && let Ok(content) = std::fs::read_to_string(path)

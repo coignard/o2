@@ -17,7 +17,10 @@
 
 //! MIDI output, note stacks, CC/PB messages, OSC, and UDP.
 
+use crate::core::io::osc::Osc;
+use crate::core::io::udp::Udp;
 use midir::{MidiInput, MidiOutput, MidiOutputConnection};
+use rosc::{OscMessage, OscPacket, OscType, encoder};
 use std::net::UdpSocket;
 
 /// A single note event in the polyphonic playback stack.
@@ -82,10 +85,10 @@ pub struct MidiState {
     pub mono_stack: [Option<MidiNote>; 16],
     /// Pending CC and Pitch Bend messages, cleared after each [`run`](MidiState::run) call.
     pub cc_stack: Vec<MidiMessage>,
-    /// Pending OSC messages `(path, body)`, cleared after each tick.
-    pub osc_stack: Vec<(String, String)>,
-    /// Pending UDP datagrams, cleared after each tick.
-    pub udp_stack: Vec<String>,
+    /// OSC output state: pending message queue and destination port.
+    pub osc: Osc,
+    /// UDP output state: pending datagram queue and destination port.
+    pub udp: Udp,
     /// Base controller number added to every CC knob value before transmitting.
     pub cc_offset: u8,
     /// Display name of the currently selected MIDI output device.
@@ -98,8 +101,13 @@ pub struct MidiState {
     pub input_index: i32,
     /// Bound UDP socket used for both OSC and raw UDP transmission.
     pub udp_socket: Option<UdpSocket>,
-    /// Destination UDP port. Defaults to 49161.
-    pub udp_port: u16,
+    /// Destination IP address for OSC and UDP output. Defaults to
+    /// `"127.0.0.1"`.
+    pub ip: String,
+    /// When `Some`, outgoing MIDI bytes are additionally forwarded as
+    /// OSC packets to the given path, formatted for Plogue Bidule
+    /// (e.g. `"/OSC_MIDI_0/MIDI"`).
+    pub osc_midi_bidule: Option<String>,
 }
 
 impl std::fmt::Debug for MidiState {
@@ -110,7 +118,8 @@ impl std::fmt::Debug for MidiState {
             .field("output_index", &self.output_index)
             .field("input_index", &self.input_index)
             .field("cc_offset", &self.cc_offset)
-            .field("udp_port", &self.udp_port)
+            .field("ip", &self.ip)
+            .field("osc_midi_bidule", &self.osc_midi_bidule)
             .field("stack_len", &self.stack.len())
             .field("cc_stack_len", &self.cc_stack.len())
             .finish_non_exhaustive()
@@ -126,15 +135,16 @@ impl MidiState {
             stack: Vec::new(),
             mono_stack: std::array::from_fn(|_| None),
             cc_stack: Vec::new(),
-            osc_stack: Vec::new(),
-            udp_stack: Vec::new(),
+            osc: Osc::new(49162),
+            udp: Udp::new(49161),
             cc_offset: 64,
             device_name: String::from("No Midi Device"),
             input_device_name: String::from("No Input Device"),
             output_index: -1,
             input_index: -1,
             udp_socket: UdpSocket::bind("0.0.0.0:0").ok(),
-            udp_port: 49161,
+            ip: String::from("127.0.0.1"),
+            osc_midi_bidule: None,
         };
         state.select_next_output();
         state
@@ -179,6 +189,36 @@ impl MidiState {
         }
     }
 
+    /// Sends a raw MIDI message to the active output connection.
+    ///
+    /// If [`osc_midi_bidule`](MidiState::osc_midi_bidule) is set, the
+    /// same bytes are also transmitted as a three-integer OSC packet to
+    /// [`ip`](MidiState::ip):[`osc.port`](Osc::port), zero-padded to
+    /// three arguments as required by Bidule.
+    pub fn send_midi_msg(&mut self, msg: &[u8]) {
+        if let Some(conn) = self.out.as_mut() {
+            let _ = conn.send(msg);
+        }
+        if let Some(bidule_path) = &self.osc_midi_bidule
+            && let Some(sock) = &self.udp_socket
+        {
+            let mut args = Vec::with_capacity(3);
+            for &b in msg {
+                args.push(OscType::Int(b as i32));
+            }
+            while args.len() < 3 {
+                args.push(OscType::Int(0));
+            }
+            let packet = OscPacket::Message(OscMessage {
+                addr: bidule_path.clone(),
+                args,
+            });
+            if let Ok(bytes) = encoder::encode(&packet) {
+                let _ = sock.send_to(&bytes, (self.ip.as_str(), self.osc.port));
+            }
+        }
+    }
+
     /// Processes all pending note and CC events for the current frame.
     ///
     /// For each note in the polyphonic stack:
@@ -188,78 +228,58 @@ impl MidiState {
     /// After processing notes, all pending CC/PB, OSC, and UDP messages are
     /// dispatched and the queues are cleared.
     pub fn run(&mut self) {
-        if let Some(conn) = self.out.as_mut() {
-            self.stack.retain_mut(|note| {
+        let mut to_send = Vec::new();
+
+        self.stack.retain_mut(|note| {
+            if !note.is_played {
+                to_send.push(vec![0x90 + note.channel, note.note_id, note.velocity]);
+                note.is_played = true;
+            }
+            if note.length < 1 {
+                to_send.push(vec![0x80 + note.channel, note.note_id, 0]);
+                false
+            } else {
+                note.length = note.length.saturating_sub(1);
+                true
+            }
+        });
+
+        for slot in self.mono_stack.iter_mut() {
+            if let Some(note) = slot {
+                if note.length < 1 {
+                    if note.is_played {
+                        to_send.push(vec![0x80 + note.channel, note.note_id, 0]);
+                    }
+                    *slot = None;
+                    continue;
+                }
                 if !note.is_played {
-                    let _ = conn.send(&[0x90 + note.channel, note.note_id, note.velocity]);
+                    to_send.push(vec![0x90 + note.channel, note.note_id, note.velocity]);
                     note.is_played = true;
                 }
-                if note.length < 1 {
-                    let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
-                    false
-                } else {
-                    note.length = note.length.saturating_sub(1);
-                    true
-                }
-            });
-
-            for slot in self.mono_stack.iter_mut() {
-                if let Some(note) = slot {
-                    if note.length < 1 {
-                        if note.is_played {
-                            let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
-                        }
-                        *slot = None;
-                        continue;
-                    }
-                    if !note.is_played {
-                        let _ = conn.send(&[0x90 + note.channel, note.note_id, note.velocity]);
-                        note.is_played = true;
-                    }
-                    note.length = note.length.saturating_sub(1);
-                }
+                note.length = note.length.saturating_sub(1);
             }
+        }
 
-            for msg in &self.cc_stack {
-                match msg {
-                    MidiMessage::Cc(cc) => {
-                        let knob_val = self.cc_offset.saturating_add(cc.knob).min(127);
-                        let _ = conn.send(&[0xB0 + cc.channel, knob_val, cc.value]);
-                    }
-                    MidiMessage::Pb(pb) => {
-                        let _ = conn.send(&[0xE0 + pb.channel, pb.lsb, pb.msb]);
-                    }
+        for msg in &self.cc_stack {
+            match msg {
+                MidiMessage::Cc(cc) => {
+                    let knob_val = self.cc_offset.saturating_add(cc.knob).min(127);
+                    to_send.push(vec![0xB0 + cc.channel, knob_val, cc.value]);
                 }
-            }
-        } else {
-            self.stack.retain_mut(|n| {
-                if n.length < 1 {
-                    false
-                } else {
-                    n.length = n.length.saturating_sub(1);
-                    true
-                }
-            });
-            for slot in self.mono_stack.iter_mut() {
-                if let Some(note) = slot {
-                    if note.length < 1 {
-                        *slot = None;
-                        continue;
-                    }
-                    note.length = note.length.saturating_sub(1);
+                MidiMessage::Pb(pb) => {
+                    to_send.push(vec![0xE0 + pb.channel, pb.lsb, pb.msb]);
                 }
             }
         }
 
-        if let Some(sock) = &self.udp_socket {
-            for msg in &self.udp_stack {
-                let _ = sock.send_to(msg.as_bytes(), ("127.0.0.1", self.udp_port));
-            }
+        for msg in to_send {
+            self.send_midi_msg(&msg);
         }
 
+        self.osc.run(self.udp_socket.as_ref(), &self.ip);
+        self.udp.run(self.udp_socket.as_ref(), &self.ip);
         self.cc_stack.clear();
-        self.osc_stack.clear();
-        self.udp_stack.clear();
     }
 
     /// Sends Note Off for every currently playing note and clears all stacks.
@@ -267,26 +287,31 @@ impl MidiState {
     /// Also transmits an All Notes Off (CC 123) on every channel to silence any
     /// notes that may have been missed.
     pub fn silence(&mut self) {
-        if let Some(conn) = &mut self.out {
-            for note in &self.stack {
-                if note.is_played {
-                    let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
-                }
-            }
-            for n in self.mono_stack.iter().flatten() {
-                if n.is_played {
-                    let _ = conn.send(&[0x80 + n.channel, n.note_id, 0]);
-                }
-            }
-            for ch in 0..16 {
-                let _ = conn.send(&[0xB0 + ch, 123, 0]);
+        let mut kill_notes = Vec::new();
+
+        for note in &self.stack {
+            if note.is_played {
+                kill_notes.push(vec![0x80 + note.channel, note.note_id, 0]);
             }
         }
+        for n in self.mono_stack.iter().flatten() {
+            if n.is_played {
+                kill_notes.push(vec![0x80 + n.channel, n.note_id, 0]);
+            }
+        }
+        for ch in 0..16 {
+            kill_notes.push(vec![0xB0 + ch, 123, 0]);
+        }
+
+        for msg in kill_notes {
+            self.send_midi_msg(&msg);
+        }
+
         self.stack.clear();
         self.mono_stack = std::array::from_fn(|_| None);
         self.cc_stack.clear();
-        self.osc_stack.clear();
-        self.udp_stack.clear();
+        self.osc.stack.clear();
+        self.udp.stack.clear();
     }
 
     /// Sends an optional Bank Select, Sub-bank Select, and Program Change on
@@ -294,31 +319,25 @@ impl MidiState {
     ///
     /// Parameters that are `None` are silently skipped.
     pub fn send_pg(&mut self, channel: u8, bank: Option<u8>, sub: Option<u8>, pgm: Option<u8>) {
-        if let Some(conn) = &mut self.out {
-            if let Some(b) = bank {
-                let _ = conn.send(&[0xB0 + channel, 0, b]);
-            }
-            if let Some(s) = sub {
-                let _ = conn.send(&[0xB0 + channel, 32, s]);
-            }
-            if let Some(p) = pgm {
-                let _ = conn.send(&[0xC0 + channel, p.min(127)]);
-            }
+        if let Some(b) = bank {
+            self.send_midi_msg(&[0xB0 + channel, 0, b]);
+        }
+        if let Some(s) = sub {
+            self.send_midi_msg(&[0xB0 + channel, 32, s]);
+        }
+        if let Some(p) = pgm {
+            self.send_midi_msg(&[0xC0 + channel, p.min(127)]);
         }
     }
 
     /// Transmits a MIDI Start message (0xFA) to the output device.
     pub fn send_clock_start(&mut self) {
-        if let Some(conn) = self.out.as_mut() {
-            let _ = conn.send(&[0xFA]);
-        }
+        self.send_midi_msg(&[0xFA]);
     }
 
     /// Transmits a MIDI Stop message (0xFC) to the output device.
     pub fn send_clock_stop(&mut self) {
-        if let Some(conn) = self.out.as_mut() {
-            let _ = conn.send(&[0xFC]);
-        }
+        self.send_midi_msg(&[0xFC]);
     }
 }
 
@@ -348,9 +367,7 @@ mod tests {
 
         state.run();
         assert_eq!(state.stack.len(), 1);
-        if state.out.is_some() {
-            assert!(state.stack[0].is_played);
-        }
+        assert!(state.stack[0].is_played);
         assert_eq!(state.stack[0].length, 1);
 
         state.run();
@@ -389,17 +406,18 @@ mod tests {
             value: 127,
         }));
         state
-            .osc_stack
+            .osc
+            .stack
             .push(("/test".to_string(), "data".to_string()));
-        state.udp_stack.push("udp_data".to_string());
+        state.udp.stack.push("udp_data".to_string());
 
         state.silence();
 
         assert!(state.stack.is_empty());
         assert!(state.mono_stack.iter().all(|s| s.is_none()));
         assert!(state.cc_stack.is_empty());
-        assert!(state.osc_stack.is_empty());
-        assert!(state.udp_stack.is_empty());
+        assert!(state.osc.stack.is_empty());
+        assert!(state.udp.stack.is_empty());
     }
 
     #[test]
@@ -412,14 +430,15 @@ mod tests {
             msb: 0,
         }));
         state
-            .osc_stack
-            .push(("path".to_string(), "body".to_string()));
-        state.udp_stack.push("datagram".to_string());
+            .osc
+            .stack
+            .push(("/path".to_string(), "body".to_string()));
+        state.udp.stack.push("datagram".to_string());
 
         state.run();
 
         assert!(state.cc_stack.is_empty());
-        assert!(state.osc_stack.is_empty());
-        assert!(state.udp_stack.is_empty());
+        assert!(state.osc.stack.is_empty());
+        assert!(state.udp.stack.is_empty());
     }
 }

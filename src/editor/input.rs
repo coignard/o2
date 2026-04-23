@@ -964,12 +964,12 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
             let h = app.engine.h;
             app.resize(new_w, h);
         }
-        KeyCode::Char('_') | KeyCode::Char('-') => {
+        KeyCode::Char('-') => {
             let new_h = app.engine.h.saturating_sub(app.grid_h).max(1);
             let w = app.engine.w;
             app.resize(w, new_h);
         }
-        KeyCode::Char('+') | KeyCode::Char('=') => {
+        KeyCode::Char('+') => {
             let new_h = app.engine.h + app.grid_h;
             let w = app.engine.w;
             app.resize(w, new_h);
