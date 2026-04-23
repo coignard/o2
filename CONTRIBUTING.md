@@ -1,4 +1,4 @@
-# Contributing to o2
+# Contributing to O₂
 
 ## Development Setup
 
