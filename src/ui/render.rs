@@ -33,7 +33,7 @@
 
 use crate::core::app::{EditorState, InputMode, PopupType, PromptPurpose};
 use crate::editor::input::autocomplete_path;
-use crate::ui::theme::{darken, B_INV, BG, F_MED, StyleType};
+use crate::ui::theme::{B_INV, BG, F_MED, StyleType, darken};
 use ratatui::{
     Frame,
     layout::{Constraint, HorizontalAlignment, Layout, Rect},
