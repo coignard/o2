@@ -61,10 +61,16 @@ o2-rs = "0.1.0"
 
 O₂ extends the original ORCΛ operator set with one additional glyph.
 
-The `&` character is valid in the length port of the MIDI (`:`) and Mono (` % `) operators. It creates a note with no scheduled Note Off: the note sustains indefinitely until explicitly killed or replaced.
+The `&` character is valid in the length port of the MIDI (`:`) and Mono (` % `) operators. It creates a note with no scheduled Note Off.
 
 ```
 :41C.&
+```
+
+An explicit Note Off event can be sent with:
+
+```
+:41C.0
 ```
 
 ## Test
