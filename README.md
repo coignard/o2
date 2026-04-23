@@ -2,8 +2,6 @@
 
 Rust port of the ORCΛ esoteric programming language and terminal livecoding environment.
 
-Batteries included.
-
 [![CI](https://github.com/coignard/o2/workflows/CI/badge.svg)](https://github.com/coignard/o2/actions)
 [![CodeQL](https://github.com/coignard/o2/workflows/CodeQL/badge.svg)](https://github.com/coignard/o2/security/code-scanning)
 [![Documentation](https://docs.rs/o2-rs/badge.svg)](https://docs.rs/o2-rs)
@@ -19,6 +17,8 @@ The original ORCΛ ecosystem has two reference implementations: a [JavaScript/El
 O₂ borrows the JS version's UX and builds it on the flat-buffer memory layout from Orca-C, in Rust. That means a phase-locked MIDI clock, zero heap allocations per frame, a ratatui UI with span-merging to cut terminal I/O, and native clipboard via arboard rather than xclip.
 
 If you already write ORCΛ patches, O₂ runs them as-is.
+
+Batteries included.
 
 ## Install
 
