@@ -35,6 +35,7 @@
 use crate::core::app::EditorState;
 use crate::core::app::{InputMode, PopupType, PromptPurpose};
 use crate::editor::commander::{preview_command, run_command};
+use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
 use crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
@@ -62,23 +63,27 @@ fn main_menu_down(mut sel: usize) -> usize {
     sel
 }
 
-fn unix_to_arvelie_neralie(unix: u64) -> String {
-    let mut days = unix / 86_400_000;
-    let mut year = 1970;
+/// Converts a given `chrono::DateTime` to an Arvelie-Neralie date-time string.
+///
+/// The Arvelie calendar divides the year into 26 fortnights labelled `A`-`Z`,
+/// plus a short overflow period labelled `+`. The Neralie time is expressed as
+/// a six-digit decimal fraction of the day (0-999999).
+///
+/// # Examples
+///
+/// ```
+/// use chrono::{TimeZone, Utc};
+/// use o2_rs::editor::input::datetime_to_arvelie_neralie;
+///
+/// // 1970-01-01 00:00:00.000 UTC → year 70, fortnight A, day 01, neralie 000000
+/// let dt = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+/// assert_eq!(datetime_to_arvelie_neralie(&dt), "70A01-000000");
+/// ```
+pub fn datetime_to_arvelie_neralie<T: TimeZone>(datetime: &DateTime<T>) -> String {
+    let year = datetime.year();
+    let y_str = format!("{:02}", year.rem_euclid(100));
 
-    loop {
-        let is_leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-        let days_in_year = if is_leap { 366 } else { 365 };
-        if days >= days_in_year {
-            days -= days_in_year;
-            year += 1;
-        } else {
-            break;
-        }
-    }
-
-    let doty = days;
-    let y_str = format!("{:02}", year % 100);
+    let doty = datetime.ordinal() - 1;
 
     let m = if doty == 364 || doty == 365 {
         '+'
@@ -88,18 +93,20 @@ fn unix_to_arvelie_neralie(unix: u64) -> String {
 
     let d = if doty == 365 { 2 } else { (doty % 14) + 1 };
 
-    let ms_since_midnight = unix % 86_400_000;
+    let ms_since_midnight = (datetime.num_seconds_from_midnight() as u64) * 1000
+        + (datetime.nanosecond() / 1_000_000) as u64;
+
     let neralie = (ms_since_midnight * 1_000_000) / 86_400_000;
 
     format!("{}{}{:02}-{:06}", y_str, m, d, neralie)
 }
 
-fn arvelie_neralie() -> String {
-    let unix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
-    unix_to_arvelie_neralie(unix)
+/// Returns the current local wall-clock time formatted as an Arvelie-Neralie string.
+///
+/// Reads the system clock via [`chrono::Local`] and delegates to
+/// [`datetime_to_arvelie_neralie`].
+pub fn arvelie_neralie() -> String {
+    datetime_to_arvelie_neralie(&Local::now())
 }
 
 /// Handles a mouse event, routing it to the active popup or to the grid.
@@ -332,6 +339,26 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
     let ctrl =
         key.modifiers.contains(KeyModifiers::CONTROL) || key.modifiers.contains(KeyModifiers::META);
 
+    if ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
+        let already_confirming = app
+            .popup
+            .iter()
+            .any(|p| matches!(p, PopupType::ConfirmQuit { .. }));
+        if already_confirming {
+            return;
+        }
+
+        if app.is_dirty() {
+            app.popup.push(PopupType::ConfirmQuit {
+                selected: 0,
+                has_file: app.current_file.is_some(),
+            });
+        } else {
+            app.running = false;
+        }
+        return;
+    }
+
     if let Some(mut popup) = app.popup.pop() {
         let mut close_popup = false;
         let mut pop_parent = false;
@@ -420,10 +447,16 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                     }),
                     17 => {
                         if app.is_dirty() {
-                            spawn_popups.push(PopupType::ConfirmQuit {
-                                selected: 0,
-                                has_file: app.current_file.is_some(),
-                            });
+                            let already_confirming = app
+                                .popup
+                                .iter()
+                                .any(|p| matches!(p, PopupType::ConfirmQuit { .. }));
+                            if !already_confirming {
+                                spawn_popups.push(PopupType::ConfirmQuit {
+                                    selected: 0,
+                                    has_file: app.current_file.is_some(),
+                                });
+                            }
                         } else {
                             app.running = false;
                         }
@@ -563,6 +596,8 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                             let (cols, rows) = crossterm::terminal::size()
                                 .unwrap_or((app.engine.w as u16, app.engine.h as u16));
                             app.resize(cols as usize, rows.saturating_sub(2) as usize);
+                            app.history.saved_absolute_index =
+                                Some(app.history.offset + app.history.index);
                             close_popup = true;
                             pop_parent = true;
                         } else {
@@ -620,18 +655,6 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
 
         app.popup.extend(spawn_popups);
 
-        return;
-    }
-
-    if ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
-        if app.is_dirty() {
-            app.popup.push(PopupType::ConfirmQuit {
-                selected: 0,
-                has_file: app.current_file.is_some(),
-            });
-        } else {
-            app.running = false;
-        }
         return;
     }
 

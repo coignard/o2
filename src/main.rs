@@ -33,11 +33,14 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use o2_rs::core::app::{EditorState, PopupType};
-use o2_rs::{editor::input, ui::render};
+use o2_rs::{
+    core::app::{EditorState, PopupType},
+    editor::input,
+    ui::render,
+};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{
-    io,
+    io::{self, Stdout},
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -128,6 +131,14 @@ struct Cli {
     file: Option<PathBuf>,
 }
 
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        restore_terminal();
+    }
+}
+
 fn parse_size(s: &str) -> Result<(usize, usize), String> {
     let parts: Vec<&str> = s.split('x').collect();
     if parts.len() != 2 {
@@ -138,49 +149,49 @@ fn parse_size(s: &str) -> Result<(usize, usize), String> {
     Ok((w, h))
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(
+        io::stdout(),
+        LeaveAlternateScreen,
+        DisableMouseCapture,
+        DisableBracketedPaste,
+        crossterm::cursor::Show
+    );
+}
 
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(
-        stdout,
-        EnterAlternateScreen,
-        EnableMouseCapture,
-        EnableBracketedPaste
-    )?;
+fn emergency_save(app: &EditorState) {
+    let save_path = if let Some(path) = &app.current_file {
+        let mut os_string = path.as_os_str().to_os_string();
+        os_string.push(".save");
+        PathBuf::from(os_string)
+    } else {
+        PathBuf::from(format!("patch-{}.o2.save", input::arvelie_neralie()))
+    };
 
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    terminal.clear()?;
-
-    let size = terminal.size()?;
-    let mut term_w = size.width.max(1) as usize;
-    let mut term_h = (size.height.saturating_sub(2)).max(1) as usize;
-
-    if let Some((w, h)) = cli.initial_size {
-        term_w = w;
-        term_h = h;
+    let mut content = String::with_capacity((app.engine.w + 1) * app.engine.h);
+    for y in 0..app.engine.h {
+        for x in 0..app.engine.w {
+            content.push(app.engine.cells[y * app.engine.w + x]);
+        }
+        content.push('\n');
     }
 
-    let mut app = EditorState::new(term_w, term_h, cli.seed, cli.undo_limit);
-    app.set_bpm(cli.bpm);
-
-    if let Some(path) = cli.file
-        && let Ok(content) = std::fs::read_to_string(&path)
-    {
-        app.load(&content, Some(path));
-        app.resize(term_w.max(app.engine.w), term_h.max(app.engine.h));
+    if std::fs::write(&save_path, content.trim_end()).is_ok() {
+        eprintln!(
+            "\n[o2] Application panicked! Emergency save created at: {}",
+            save_path.display()
+        );
     }
+}
 
-    if app.paused {
-        app.update_ports();
-    }
-
+fn run_app(
+    app: &mut EditorState,
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    cli: &Cli,
+) -> Result<()> {
     let mut next_clock_tick = Instant::now();
     let mut clock_counter = 0;
-
     let mut needs_draw = true;
 
     loop {
@@ -190,7 +201,7 @@ fn main() -> Result<()> {
             let viewport_h = size.height.saturating_sub(2) as usize;
             app.update_scroll(viewport_w, viewport_h);
 
-            terminal.draw(|f| render::draw(f, &app))?;
+            terminal.draw(|f| render::draw(f, app))?;
             needs_draw = false;
         }
 
@@ -223,21 +234,21 @@ fn main() -> Result<()> {
                     needs_draw = true;
                 }
                 Event::Mouse(mouse_event) => {
-                    input::handle_mouse(&mut app, mouse_event);
+                    input::handle_mouse(app, mouse_event);
                     if app.paused {
                         app.update_ports();
                     }
                     needs_draw = true;
                 }
                 Event::Key(key) => {
-                    input::handle_key(&mut app, key);
+                    input::handle_key(app, key);
                     if app.paused {
                         app.update_ports();
                     }
                     needs_draw = true;
                 }
                 Event::Paste(ref text) => {
-                    input::handle_paste(&mut app, text);
+                    input::handle_paste(app, text);
                     if app.paused {
                         app.update_ports();
                     }
@@ -294,14 +305,65 @@ fn main() -> Result<()> {
         }
     }
 
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture,
-        DisableBracketedPaste
-    )?;
-    terminal.show_cursor()?;
-
     Ok(())
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        restore_terminal();
+        original_hook(panic_info);
+    }));
+
+    enable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableBracketedPaste
+    )?;
+
+    let _guard = TerminalGuard;
+
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
+
+    let size = terminal.size()?;
+    let mut term_w = size.width.max(1) as usize;
+    let mut term_h = (size.height.saturating_sub(2)).max(1) as usize;
+
+    if let Some((w, h)) = cli.initial_size {
+        term_w = w;
+        term_h = h;
+    }
+
+    let mut app = EditorState::new(term_w, term_h, cli.seed, cli.undo_limit);
+    app.set_bpm(cli.bpm);
+
+    if let Some(path) = &cli.file
+        && let Ok(content) = std::fs::read_to_string(path)
+    {
+        app.load(&content, Some(path.clone()));
+        app.resize(term_w.max(app.engine.w), term_h.max(app.engine.h));
+        app.history.saved_absolute_index = Some(app.history.offset + app.history.index);
+    }
+
+    if app.paused {
+        app.update_ports();
+    }
+
+    let loop_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_app(&mut app, &mut terminal, &cli)
+    }));
+
+    match loop_result {
+        Ok(result) => result,
+        Err(err) => {
+            emergency_save(&app);
+            std::panic::resume_unwind(err);
+        }
+    }
 }

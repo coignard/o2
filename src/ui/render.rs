@@ -290,17 +290,7 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
         );
         write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input);
     } else {
-        write_ui(
-            &mut ui_l2,
-            if app.engine.f < 25 {
-                "hallo!"
-            } else {
-                "v0.1.0"
-            },
-            0,
-            gw,
-            StyleType::Input,
-        );
+        write_ui(&mut ui_l2, "v0.1.0", 0, gw, StyleType::Input);
         write_ui(
             &mut ui_l2,
             &format!("{}x{}", app.engine.w, app.engine.h),
@@ -964,7 +954,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 "                I   I             ",
                 "             -------------/       ",
                 "                                  ",
-                "             ROFL COPTER!!!       ",
+                "           ROFL COPTER!!!         ",
             ];
 
             const FRAME_1: &[&str] = &[
@@ -976,7 +966,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 "                I   I             ",
                 "             -------------/       ",
                 "                                  ",
-                "             ROFL COPTER!!!       ",
+                "           ROFL COPTER!!!         ",
             ];
 
             let frame = if app.engine.f % 2 == 0 {
