@@ -630,22 +630,18 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
                 KeyCode::End => {
                     *cursor = input.chars().count();
                 }
-                KeyCode::Backspace => {
-                    if *cursor > 0 {
-                        *cursor -= 1;
-                        let byte_idx = input
-                            .char_indices()
-                            .nth(*cursor)
-                            .map(|(i, _)| i)
-                            .unwrap_or(input.len());
-                        input.remove(byte_idx);
-                    }
+                KeyCode::Backspace if *cursor > 0 => {
+                    *cursor -= 1;
+                    let byte_idx = input
+                        .char_indices()
+                        .nth(*cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(input.len());
+                    input.remove(byte_idx);
                 }
-                KeyCode::Delete => {
-                    if *cursor < input.chars().count() {
-                        let byte_idx = input.char_indices().nth(*cursor).map(|(i, _)| i).unwrap();
-                        input.remove(byte_idx);
-                    }
+                KeyCode::Delete if *cursor < input.chars().count() => {
+                    let byte_idx = input.char_indices().nth(*cursor).map(|(i, _)| i).unwrap();
+                    input.remove(byte_idx);
                 }
                 KeyCode::Char(c) => {
                     let byte_idx = input

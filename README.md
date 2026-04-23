@@ -57,8 +57,10 @@ Or add the following line to your `Cargo.toml`:
 o2-rs = "0.1.0"
 ```
 
-## Usage
+## Todo
 
+- [ ] OSC/UDP support
+- [ ] MIDI input support
 
 ## Test
 

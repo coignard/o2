@@ -909,8 +909,6 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
             };
 
             let mut spans = vec![Span::styled(" ", popup_style)];
-            let mut chars = input.chars().peekable();
-            let mut i = 0;
 
             let blink = app.engine.f % 2 == 0;
             let cursor_style = if blink {
@@ -919,13 +917,12 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
                 Style::new().fg(BG).bg(B_INV)
             };
 
-            while let Some(c) = chars.next() {
+            for (i, c) in input.chars().enumerate() {
                 if i == *cursor {
                     spans.push(Span::styled(c.to_string(), cursor_style));
                 } else {
                     spans.push(Span::styled(c.to_string(), popup_style));
                 }
-                i += 1;
             }
 
             let ac_color = darken(B_INV, 60);

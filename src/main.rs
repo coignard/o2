@@ -226,7 +226,6 @@ fn run_app(
         if event::poll(timeout)? {
             match event::read()? {
                 Event::Resize(cols, rows) => {
-                    terminal.clear()?;
                     let new_w = (cols as usize).max(app.engine.w);
                     let new_h = (rows.saturating_sub(2) as usize).max(app.engine.h);
                     app.resize(new_w, new_h);
@@ -332,7 +331,6 @@ fn main() -> Result<()> {
 
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
-    terminal.clear()?;
 
     let size = terminal.size()?;
     let mut term_w = size.width.max(1) as usize;

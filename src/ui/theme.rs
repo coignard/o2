@@ -118,6 +118,27 @@ impl StyleType {
     }
 }
 
+/// Scales the brightness of an RGB colour to the specified percentage.
+///
+/// The `percent` argument determines the remaining brightness of the colour:
+/// a value of `100` leaves the colour completely unchanged, `50` reduces its
+/// channel values by half, and `0` yields pure black. Values above `100` will
+/// brighten the colour (clamping at 255 due to `u8` conversion limits).
+///
+/// Note that this function only operates on [`Color::Rgb`] variants. If any
+/// other [`Color`] variant is passed (such as named or ANSI indexed colours),
+/// it is returned unmodified.
+///
+/// # Examples
+///
+/// ```
+/// use ratatui::style::Color;
+/// use o2_rs::ui::theme::darken;
+///
+/// let base = Color::Rgb(100, 200, 50);
+/// let dark = darken(base, 60); // 60% of original brightness
+/// assert_eq!(dark, Color::Rgb(60, 120, 30));
+/// ```
 pub const fn darken(color: Color, percent: u16) -> Color {
     match color {
         Color::Rgb(r, g, b) => Color::Rgb(

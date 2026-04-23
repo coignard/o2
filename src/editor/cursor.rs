@@ -54,14 +54,21 @@ impl EditorState {
     }
 
     /// Moves the cursor by `(dx, -dy)` cells, preserving the current selection
-    /// dimensions.  Note the sign inversion on `dy`: positive `dy` moves upward.
+    /// dimensions. Note the sign inversion on `dy`: positive `dy` moves upward.
     pub fn move_cursor(&mut self, dx: isize, dy: isize) {
-        self.select(
-            self.cx as isize + dx,
-            self.cy as isize - dy,
-            self.cw,
-            self.ch,
-        );
+        let max_grid_x = (self.engine.w.saturating_sub(1)) as isize;
+        let max_grid_y = (self.engine.h.saturating_sub(1)) as isize;
+
+        let min_x_allowed = 0isize.max(-self.cw);
+        let max_x_allowed = max_grid_x.min(max_grid_x - self.cw);
+
+        let min_y_allowed = 0isize.max(-self.ch);
+        let max_y_allowed = max_grid_y.min(max_grid_y - self.ch);
+
+        let target_x = (self.cx as isize + dx).clamp(min_x_allowed, max_x_allowed);
+        let target_y = (self.cy as isize - dy).clamp(min_y_allowed, max_y_allowed);
+
+        self.select(target_x, target_y, self.cw, self.ch);
     }
 
     /// Extends or contracts the selection by moving the cursor anchor to `(cx + dw, cy - dh)`.
@@ -453,7 +460,9 @@ mod tests {
 
         app.move_cursor(-20, -20);
         assert_eq!(app.cx, 0);
-        assert_eq!(app.cy, 9);
+        assert_eq!(app.cy, 7);
+        assert_eq!(app.cw, 2);
+        assert_eq!(app.ch, 2);
     }
 
     #[test]
