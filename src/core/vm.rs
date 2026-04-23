@@ -632,20 +632,23 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
             if is_note_off {
                 if is_mono {
                     if let Some(existing) = &mut mono_stack[channel] {
-                        if existing.is_played {
-                            if let Some(conn) = out_ref.as_mut() {
-                                let _ = conn.send(&[0x80 + existing.channel, existing.note_id, 0]);
-                            }
+                        if existing.is_played
+                            && let Some(conn) = out_ref.as_mut()
+                        {
+                            let _ = conn.send(&[0x80 + existing.channel, existing.note_id, 0]);
                         }
                         mono_stack[channel] = None;
                     }
                 } else {
                     stack.retain_mut(|note| {
-                        if note.channel == channel as u8 && note.octave == octave as u8 && note.note == note_g {
-                            if note.is_played {
-                                if let Some(conn) = out_ref.as_mut() {
-                                    let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
-                                }
+                        if note.channel == channel as u8
+                            && note.octave == octave as u8
+                            && note.note == note_g
+                        {
+                            if note.is_played
+                                && let Some(conn) = out_ref.as_mut()
+                            {
+                                let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
                             }
                             false
                         } else {
@@ -674,10 +677,10 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
                         existing.length = length;
                         skip_note_on = true;
                     } else {
-                        if existing.is_played {
-                            if let Some(conn) = out_ref.as_mut() {
-                                let _ = conn.send(&[0x80 + existing.channel, existing.note_id, 0]);
-                            }
+                        if existing.is_played
+                            && let Some(conn) = out_ref.as_mut()
+                        {
+                            let _ = conn.send(&[0x80 + existing.channel, existing.note_id, 0]);
                         }
                     }
                 }
@@ -689,16 +692,19 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
                 let mut skip_note_on = false;
 
                 stack.retain_mut(|note| {
-                    if note.channel == channel as u8 && note.octave == octave as u8 && note.note == note_g {
+                    if note.channel == channel as u8
+                        && note.octave == octave as u8
+                        && note.note == note_g
+                    {
                         if is_tied {
                             note.length = length;
                             skip_note_on = true;
                             true
                         } else {
-                            if note.is_played {
-                                if let Some(conn) = out_ref.as_mut() {
-                                    let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
-                                }
+                            if note.is_played
+                                && let Some(conn) = out_ref.as_mut()
+                            {
+                                let _ = conn.send(&[0x80 + note.channel, note.note_id, 0]);
                             }
                             false
                         }
