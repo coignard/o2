@@ -17,10 +17,10 @@
 
 //! # O₂
 //!
-//! `O₂` is a Rust port of the [ORCΛ](https://github.com/hundredrabbits/Orca)
+//! `o2` is a Rust port of the [ORCΛ](https://github.com/hundredrabbits/Orca)
 //! esoteric programming language and terminal livecoding environment.
 //!
-//! This library exposes the core engine of `O₂`, allowing other developers to:
+//! This library exposes the core engine of `o2`, allowing other developers to:
 //! - Run the grid simulation ([`core::app`], [`core::vm`]).
 //! - Send MIDI, OSC, and UDP output ([`core::io`]).
 //! - Map glyphs to MIDI note IDs ([`core::transpose`]).

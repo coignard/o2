@@ -470,7 +470,7 @@ impl EditorState {
     /// ```
     pub fn is_allowed(g: char) -> bool {
         let gl = g.to_ascii_lowercase();
-        gl == '.' || gl.is_ascii_alphanumeric() || "*#$!%:?=;".contains(gl)
+        gl == '.' || gl.is_ascii_alphanumeric() || "*#$!%:?=;&".contains(gl)
     }
 
     /// Returns the flat-array index for cell `(x, y)`, or `None` if out of bounds.
@@ -1128,7 +1128,7 @@ mod tests {
     #[test]
     fn test_is_allowed() {
         let allowed = [
-            '.', '0', '9', 'a', 'z', 'A', 'Z', '*', '#', '$', '!', '%', ':', '?', '=', ';',
+            '.', '0', '9', 'a', 'z', 'A', 'Z', '*', '#', '$', '!', '%', ':', '?', '=', ';', '&',
         ];
         for c in allowed {
             assert!(EditorState::is_allowed(c));
@@ -1845,7 +1845,7 @@ mod property_tests {
         fn prop_is_allowed(c in any::<char>()) {
             let allowed = EditorState::is_allowed(c);
             let cl = c.to_ascii_lowercase();
-            if cl == '.' || cl.is_ascii_alphanumeric() || "*#$!%:?=;".contains(cl) {
+            if cl == '.' || cl.is_ascii_alphanumeric() || "*#$!%:?=;&".contains(cl) {
                 assert!(allowed);
             } else {
                 assert!(!allowed);
