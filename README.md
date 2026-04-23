@@ -12,9 +12,9 @@ Rust port of the ORCΛ esoteric programming language and terminal livecoding env
 
 ![Demo](assets/demo.gif)
 
-The original ORCΛ ecosystem has two reference implementations: a [JavaScript/Electron desktop app](https://github.com/hundredrabbits/Orca) and a [C terminal livecoding environment](https://github.com/hundredrabbits/Orca-c). The JS version has a polished interface, but runs on a garbage-collected runtime that introduces timing jitter, a real problem when sending MIDI. The C version is fast and memory-efficient, but its ncurses UI is bare-bones and its clipboard support requires shelling out to xclip.
+The original ORCΛ ecosystem has two reference implementations: a [JavaScript/Electron desktop app](https://github.com/hundredrabbits/Orca) and a [C terminal livecoding environment](https://github.com/hundredrabbits/Orca-c). The JS version has a polished interface, but runs on a garbage-collected runtime that introduces timing jitter, a real problem when sending MIDI. The C version is fast and memory-efficient, but its ncurses UI is bare-bones and its clipboard support requires shelling out to `xclip`.
 
-O₂ borrows the JS version's UX and builds it on the flat-buffer memory layout from Orca-C, in Rust. That means a phase-locked MIDI clock, zero heap allocations per frame, a ratatui UI with span-merging to cut terminal I/O, and native clipboard via arboard rather than xclip.
+O₂ borrows the JS version's UX and builds it on the flat-buffer memory layout from Orca-C, in Rust. That means a phase-locked MIDI clock, zero heap allocations per frame, a [ratatui](https://github.com/ratatui/ratatui) UI with span-merging to cut terminal I/O, and native clipboard via arboard.
 
 If you already write ORCΛ patches, O₂ runs them as-is.
 
