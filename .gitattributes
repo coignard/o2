@@ -4,3 +4,5 @@
 *.toml text eol=lf
 *.yml text eol=lf
 .gitignore text eol=lf
+assets/demo.gif binary
+assets/orca.png binary
