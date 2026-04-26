@@ -1,8 +1,11 @@
-# O₂
+<div align="center"><a href="https://lottie.rs/">
+  <picture>
+    <source srcset="https://github.com/coignard/o2/blob/main/assets/orca.png?raw=true">
+    <img src="assets/orca.png" alt="Orca" width="150">
+  </picture>
+</a>
 
-<img src="assets/orca.png" width="150"/>
-
-Rust port of the ORCΛ esoteric programming language and terminal livecoding environment.
+Rust port of the ORCΛ esoteric programming language and terminal livecoding environment
 
 [![CI](https://github.com/coignard/o2/workflows/CI/badge.svg)](https://github.com/coignard/o2/actions)
 [![CodeQL](https://github.com/coignard/o2/workflows/CodeQL/badge.svg)](https://github.com/coignard/o2/security/code-scanning)
@@ -13,6 +16,8 @@ Rust port of the ORCΛ esoteric programming language and terminal livecoding env
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/coignard)
 
 ![Demo](assets/demo.gif)
+
+</div>
 
 The original ORCΛ ecosystem has two reference implementations: a [JavaScript/Electron desktop app](https://github.com/hundredrabbits/Orca) and a [C terminal livecoding environment](https://github.com/hundredrabbits/Orca-c). The JS version has a polished interface, but runs on a garbage-collected runtime that introduces timing jitter, a real problem when sending MIDI. The C version is fast and memory-efficient, but its ncurses UI is bare-bones and its clipboard support requires shelling out to `xclip`.
 
