@@ -1,5 +1,7 @@
 # O₂
 
+<img src="assets/orca.png" width="150"/>
+
 Rust port of the ORCΛ esoteric programming language and terminal livecoding environment.
 
 [![CI](https://github.com/coignard/o2/workflows/CI/badge.svg)](https://github.com/coignard/o2/actions)
