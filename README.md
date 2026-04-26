@@ -1,4 +1,4 @@
-<div align="center"><a href="https://github.com/coignard/o2/">
+<div align="center"><a href="https://github.com/coignard/o2">
   <picture>
     <source srcset="https://github.com/coignard/o2/blob/main/assets/orca.png?raw=true">
     <img src="assets/orca.png" alt="Orca" width="150">
