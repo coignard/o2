@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+### Fixed
+
+- Port decorations now update immediately on every edit operation (write, erase, cut, paste, undo, redo, drag, make uppercase/lowercase, toggle comment, trigger, resize, load) instead of only when the engine was paused; `update_ports()` was previously called conditionally from the main loop after each event rather than from within the operations themselves, causing stale port highlights after edits
+- `Delete` key now works identically to `Backspace` in both the main editing layer and the commander prompt
+- `Ctrl+H` now deletes the last character in the commander prompt and in the main editing layer (standard terminal backspace binding)
+
 ## 0.1.1
 
 ### Added
