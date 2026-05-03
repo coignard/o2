@@ -3,6 +3,7 @@
 ## 0.1.1
 
 ### Added
+
 - OSC and UDP output extracted into dedicated `Osc` and `Udp` structs under `core/io`
 - `send_midi_msg()` method on `MidiState` centralising all outgoing MIDI dispatch
 - Plogue Bidule support: `--osc-midi-bidule` CLI flag mirrors outgoing MIDI as OSC packets to a configurable path
@@ -13,6 +14,7 @@
 - Retrigger prevention for already-playing tied notes to avoid restarting the attack envelope
 
 ### Changed
+
 - `osc_stack` and `udp_stack` fields on `MidiState` replaced by `osc: Osc` and `udp: Udp`
 - `udp_port` field replaced by `ip: String` and per-protocol port fields on `Osc`/`Udp`
 - Note Off messages in `op_midi_mono` now collected and dispatched through `send_midi_msg()` instead of writing directly to the connection
@@ -21,6 +23,7 @@
 ## 0.1.0
 
 ### Added
+
 - Cursor navigation to prompt dialogs including mid-string editing and support for Left/Right/Home/End/Delete keys
 - Blinking cursor indicator with autocomplete rendering in prompt dialogs
 - Autocomplete functionality using the Tab key for path prompts, including a preview renderer
@@ -34,6 +37,7 @@
 - ROFL COPTER!!!
 
 ### Changed
+
 - Refactored Arvelie-Neralie time calculations to use the `chrono` crate for correct local-time formatting
 - Refactored `vm.rs` operators to use a unified `VmContext`, significantly reducing parameter repetition
 - Extracted `run_app()` from the `main()` function to provide cleaner separation of concerns
@@ -44,6 +48,7 @@
 - Updated documentation comments project-wide, changing references from 'Orca' to 'ORCΛ'
 
 ### Fixed
+
 - Out-of-bounds cursor movement by properly clamping targets based on selection dimensions (width and height)
 - Backspace key behavior in prompts to delete characters exactly at the cursor position rather than only from the end of the string
 - Issue where `saved_absolute_index` was not being set after successfully opening a file
