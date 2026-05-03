@@ -905,8 +905,8 @@ impl EditorState {
     pub fn trigger(&mut self) {
         let g = self.glyph_at(self.cx, self.cy);
         if g != '.' && Self::is_operator(g) {
-            crate::core::vm::run(self, self.cx, self.cy, g, true, false);
             self.update_ports();
+            crate::core::vm::run(self, self.cx, self.cy, g, true, false);
         }
     }
 
