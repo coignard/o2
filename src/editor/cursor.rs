@@ -189,6 +189,7 @@ impl EditorState {
         }
 
         self.history.record(&self.engine.cells);
+        self.update_ports();
     }
 
     /// Returns `true` if `(x, y)` lies within the normalised selection bounding
@@ -211,6 +212,7 @@ impl EditorState {
                     self.move_cursor(1, 0);
                 }
                 self.history.record(&self.engine.cells);
+                self.update_ports();
             }
         }
     }
@@ -230,6 +232,7 @@ impl EditorState {
             }
         }
         self.history.record(&self.engine.cells);
+        self.update_ports();
     }
 
     /// Converts all lowercase letters in the selection to uppercase and records
@@ -244,6 +247,7 @@ impl EditorState {
             }
         }
         self.history.record(&self.engine.cells);
+        self.update_ports();
     }
 
     /// Converts all uppercase letters in the selection to lowercase and records
@@ -258,6 +262,7 @@ impl EditorState {
             }
         }
         self.history.record(&self.engine.cells);
+        self.update_ports();
     }
 
     /// Toggles a `'#'` comment block on the left and right edges of the
@@ -283,6 +288,7 @@ impl EditorState {
             }
         }
         self.history.record(&self.engine.cells);
+        self.update_ports();
     }
 }
 

@@ -416,6 +416,7 @@ impl EditorState {
         self.history.record(&self.engine.cells);
         self.history.saved_absolute_index = Some(self.history.offset + self.history.index);
         self.select(self.cx as isize, self.cy as isize, self.cw, self.ch);
+        self.update_ports();
     }
 
     /// Serialises the grid to disk at [`current_file`](EditorState::current_file).
@@ -448,11 +449,13 @@ impl EditorState {
     /// Reverts the grid to the previous history snapshot (Ctrl+Z).
     pub fn undo(&mut self) {
         self.history.undo(&mut self.engine.cells);
+        self.update_ports();
     }
 
     /// Re-applies a previously undone change (Ctrl+Shift+Z).
     pub fn redo(&mut self) {
         self.history.redo(&mut self.engine.cells);
+        self.update_ports();
     }
 
     /// Returns `true` if the character `g` is permitted in the grid.
@@ -550,6 +553,7 @@ impl EditorState {
         self.history.clear();
         self.history.record(&self.engine.cells);
         self.history.saved_absolute_index = None;
+        self.update_ports();
     }
 
     /// Returns the glyph at `(x, y)`, or `'.'` if the coordinates are out of bounds.
@@ -902,6 +906,7 @@ impl EditorState {
         let g = self.glyph_at(self.cx, self.cy);
         if g != '.' && Self::is_operator(g) {
             crate::core::vm::run(self, self.cx, self.cy, g, true, false);
+            self.update_ports();
         }
     }
 
@@ -960,6 +965,7 @@ impl EditorState {
 
         self.select(self.min_x as isize, self.min_y as isize, w, h);
         self.history.record(&self.engine.cells);
+        self.update_ports();
     }
 
     pub(crate) fn calc_bounds(&mut self) {

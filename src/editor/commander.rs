@@ -150,6 +150,7 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                     }
                 }
                 app.history.record(&app.engine.cells);
+                app.update_ports();
             }
         }
         "time" | "ti" => {
@@ -169,6 +170,7 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                 }
             }
             app.history.record(&app.engine.cells);
+            app.update_ports();
         }
         "cc" => {
             if let Ok(v) = value.parse::<u8>() {

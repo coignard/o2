@@ -290,7 +290,7 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
         );
         write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input);
     } else {
-        write_ui(&mut ui_l2, "v0.1.1", 0, gw, StyleType::Input);
+        write_ui(&mut ui_l2, "v0.1.2", 0, gw, StyleType::Input);
         write_ui(
             &mut ui_l2,
             &format!("{}x{}", app.engine.w, app.engine.h),

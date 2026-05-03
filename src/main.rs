@@ -235,30 +235,18 @@ fn run_app(
                     let new_w = (cols as usize).max(app.engine.w);
                     let new_h = (rows.saturating_sub(2) as usize).max(app.engine.h);
                     app.resize(new_w, new_h);
-                    if app.paused {
-                        app.update_ports();
-                    }
                     needs_draw = true;
                 }
                 Event::Mouse(mouse_event) => {
                     input::handle_mouse(app, mouse_event);
-                    if app.paused {
-                        app.update_ports();
-                    }
                     needs_draw = true;
                 }
                 Event::Key(key) => {
                     input::handle_key(app, key);
-                    if app.paused {
-                        app.update_ports();
-                    }
                     needs_draw = true;
                 }
                 Event::Paste(ref text) => {
                     input::handle_paste(app, text);
-                    if app.paused {
-                        app.update_ports();
-                    }
                     needs_draw = true;
                 }
                 _ => {}
@@ -357,9 +345,7 @@ fn main() -> Result<()> {
         app.load(&content, Some(path.clone()));
         app.resize(term_w.max(app.engine.w), term_h.max(app.engine.h));
         app.history.saved_absolute_index = Some(app.history.offset + app.history.index);
-    }
-
-    if app.paused {
+    } else {
         app.update_ports();
     }
 

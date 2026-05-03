@@ -745,7 +745,11 @@ fn handle_commander_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, alt: b
             app.command_index = app.command_history.len();
             preview_command(app);
         }
-        KeyCode::Backspace => {
+        KeyCode::Backspace | KeyCode::Delete => {
+            app.query.pop();
+            preview_command(app);
+        }
+        KeyCode::Char('h') | KeyCode::Char('H') if ctrl => {
             app.query.pop();
             preview_command(app);
         }
@@ -1036,7 +1040,13 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
         KeyCode::Enter => {
             app.trigger();
         }
-        KeyCode::Backspace => {
+        KeyCode::Backspace | KeyCode::Delete => {
+            app.erase();
+            if app.mode == InputMode::Append {
+                app.move_cursor(-1, 0);
+            }
+        }
+        KeyCode::Char('h') | KeyCode::Char('H') if ctrl => {
             app.erase();
             if app.mode == InputMode::Append {
                 app.move_cursor(-1, 0);
