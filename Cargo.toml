@@ -5,7 +5,7 @@ authors = [
     "René Coignard <contact@renecoignard.com>"
 ]
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.95"
 license = "GPL-3.0-or-later"
 description = "Rust port of the ORCΛ esoteric programming language and terminal livecoding environment"
 homepage = "https://coignard.org/o2"
