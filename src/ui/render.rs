@@ -881,7 +881,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
             let list = List::new(list_items)
                 .block(
                     Block::bordered()
-                        .title(" PortMidi Device Selection ")
+                        .title(" MIDI Device Selection ")
                         .style(popup_style),
                 )
                 .style(popup_style);
