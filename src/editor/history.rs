@@ -69,6 +69,14 @@ impl History {
         }
     }
 
+    /// Creates an empty history with the given snapshot limit.
+    pub fn with_limit(limit: usize) -> Self {
+        Self {
+            limit,
+            ..Self::new()
+        }
+    }
+
     /// Records a new snapshot, discarding any redo history beyond the current
     /// position.
     ///
