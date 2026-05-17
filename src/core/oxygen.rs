@@ -38,105 +38,15 @@ use crate::core::io::MidiState;
 use crate::editor::history::History;
 use crate::ui::theme::StyleType;
 
-/// The text-entry mode of the cursor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InputMode {
-    /// Standard navigation; character keys write glyphs and do not advance the
-    /// cursor automatically.
-    Normal,
-    /// Insert mode: writing a glyph advances the cursor one step to the right.
-    Append,
-    /// Rectangle selection is active; arrow keys extend the selection bounds.
-    Selection,
-    /// Slide mode: arrow keys drag the current selection across the grid.
-    Slide,
-}
+// Re-export glyph constants so existing imports keep working.
+pub use crate::core::glyph::{ALLOWED_SPECIAL_CHARS, OPERATOR_SPECIAL_CHARS};
 
-/// Identifies the intent of a [`PopupType::Prompt`] dialogue.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PromptPurpose {
-    /// The user is entering a file path to open.
-    Open,
-    /// The user is entering a file path to save to.
-    SaveAs {
-        /// When `true`, the application exits after the file is saved successfully.
-        quit_after: bool,
-    },
-    /// The user is entering a BPM value.
-    SetBpm,
-    /// The user is entering a new grid size in `WxH` notation.
-    SetGridSize,
-}
-
-/// Describes which overlay is currently visible on top of the grid.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PopupType {
-    /// Keyboard shortcut reference card.
-    Controls,
-    /// Operator glyph reference card.
-    Operators,
-    /// About / version information screen.
-    About {
-        /// The time the popup was opened, used for animation.
-        opened_at: std::time::Instant,
-    },
-    /// Main application menu with item selection.
-    MainMenu {
-        /// Index of the currently highlighted menu item.
-        selected: usize,
-    },
-    /// MIDI output device picker.
-    MidiMenu {
-        /// Index of the currently highlighted device.
-        selected: usize,
-        /// Names of all available output devices.
-        devices: Vec<String>,
-    },
-    /// Confirmation dialogue shown before erasing the grid.
-    ConfirmNew {
-        /// `0` = Cancel, `1` = Create New File.
-        selected: usize,
-    },
-    /// Auto-fit grid size selection.
-    AutofitMenu {
-        /// `0` = Nicely (snap to grid), `1` = Tightly (fit content exactly).
-        selected: usize,
-    },
-    /// Clock and timing settings.
-    ClockMenu {
-        /// Index of the currently highlighted option (currently always `0`).
-        selected: usize,
-    },
-    /// Confirmation dialogue shown when quitting with unsaved changes.
-    ConfirmQuit {
-        /// Index of the currently highlighted option.
-        selected: usize,
-        /// `true` if a file is currently open (adds a "Save" option).
-        has_file: bool,
-    },
-    /// Single-line text input dialogue.
-    Prompt {
-        /// What the input will be used for.
-        purpose: PromptPurpose,
-        /// Text the user has typed so far.
-        input: String,
-        /// Current cursor index in the input string.
-        cursor: usize,
-    },
-    /// Generic informational or error message overlay.
-    Msg {
-        /// Short title shown in the border.
-        title: String,
-        /// Body text; may contain newlines.
-        text: String,
-    },
-    /// ROFL COPTER!!!
-    RoflCopter,
-}
+// Re-export editor types so existing `use crate::core::oxygen::{...}` paths keep working.
+pub use crate::editor::types::{CommanderState, CursorState, InputMode, PopupType, PromptPurpose};
 
 /// Core execution engine state. Pure data containing the grid and execution variables.
 #[derive(Debug)]
-pub struct Engine {
+pub struct OxygenEngine {
     /// Width of the grid in columns.
     pub w: usize,
     /// Height of the grid in rows.
@@ -163,7 +73,7 @@ pub struct Engine {
     pub(crate) ops_cache: Vec<(usize, usize, char)>,
 }
 
-impl Engine {
+impl OxygenEngine {
     /// Creates a new engine with a blank `w`-by-`h` grid and the given RNG seed.
     pub fn new(w: usize, h: usize, seed: u64) -> Self {
         Self {
@@ -184,55 +94,36 @@ impl Engine {
 /// The complete application state: engine, cursor, MIDI, history, and UI overlays.
 pub struct EditorState {
     /// The core grid engine containing cells, locks, ports, and the frame counter.
-    pub engine: Engine,
+    pub o2: OxygenEngine,
 
     /// Horizontal spacing between grid marker lines.
     pub grid_w: usize,
     /// Vertical spacing between grid marker lines.
     pub grid_h: usize,
-
     /// Horizontal scroll offset: the grid column shown at the left edge of the viewport.
     pub scroll_x: usize,
     /// Vertical scroll offset: the grid row shown at the top edge of the viewport.
     pub scroll_y: usize,
 
-    /// Cursor column.
-    pub cx: usize,
-    /// Cursor row.
-    pub cy: usize,
-    /// Selection width (may be negative for a leftward selection).
-    pub cw: isize,
-    /// Selection height (may be negative for an upward selection).
-    pub ch: isize,
-    /// Left edge of the normalised selection bounding box.
-    pub min_x: usize,
-    /// Right edge of the normalised selection bounding box.
-    pub max_x: usize,
-    /// Top edge of the normalised selection bounding box.
-    pub min_y: usize,
-    /// Bottom edge of the normalised selection bounding box.
-    pub max_y: usize,
-
+    /// Cursor position and selection geometry.
+    pub cursor: CursorState,
     /// Current text-entry mode.
     pub mode: InputMode,
+    /// Commander prompt state.
+    pub commander: CommanderState,
+
     /// When `true`, the clock is stopped and [`operate`](EditorState::operate) is not
     /// called automatically.
     pub paused: bool,
     /// Set to `false` to signal the main loop to shut down.
     pub running: bool,
-    /// Whether the commander prompt is currently open.
-    pub commander_active: bool,
-    /// Text that the user has typed into the commander prompt.
-    pub query: String,
-    /// Previously executed commander commands, for up/down history navigation.
-    pub command_history: Vec<String>,
-    /// Current position within [`command_history`](EditorState::command_history) while
-    /// navigating with the arrow keys.
-    pub command_index: usize,
     /// Current playback tempo in beats per minute.
     pub bpm: usize,
     /// Tempo that `bpm` is smoothly interpolating towards.
     pub bpm_target: usize,
+    /// Whether to broadcast MIDI Beat Clock (0xF8) messages.
+    pub midi_bclock: bool,
+
     /// Screen cell where a mouse drag began, used to compute selection bounds.
     pub mouse_from: Option<(usize, usize)>,
     /// When `true`, [`update_scroll`](EditorState::update_scroll) applies no scroll margin.
@@ -245,13 +136,9 @@ pub struct EditorState {
     /// MIDI output state, note stacks, and UDP socket.
     pub midi: MidiState,
 
-    /// Whether to broadcast MIDI Beat Clock (0xF8) messages.
-    pub midi_bclock: bool,
-
     /// Stack of currently visible overlay screens, rendered front-to-back.
     /// The last element is the topmost (focused) overlay.
     pub popup: Vec<PopupType>,
-
     /// ROFL BUFFER!!!
     pub rofl_buffer: String,
 }
@@ -264,38 +151,27 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// let app = EditorState::new(57, 25, 1, 100);
-    /// assert_eq!(app.engine.w, 57);
-    /// assert_eq!(app.engine.h, 25);
+    /// assert_eq!(app.o2.w, 57);
+    /// assert_eq!(app.o2.h, 25);
     /// assert_eq!(app.glyph_at(0, 0), '.');
     /// ```
     pub fn new(w: usize, h: usize, seed: u64, undo_limit: usize) -> Self {
-        let mut history = History::new();
-        history.limit = undo_limit;
+        let history = History::with_limit(undo_limit);
 
         let mut app = Self {
-            engine: Engine::new(w, h, seed),
+            o2: OxygenEngine::new(w, h, seed),
             grid_w: 8,
             grid_h: 8,
             scroll_x: 0,
             scroll_y: 0,
-            cx: 0,
-            cy: 0,
-            cw: 0,
-            ch: 0,
-            min_x: 0,
-            max_x: 0,
-            min_y: 0,
-            max_y: 0,
+            cursor: CursorState::new(),
             mode: InputMode::Normal,
             paused: true,
             running: true,
-            commander_active: false,
-            query: String::new(),
-            command_history: Vec::new(),
-            command_index: 0,
+            commander: CommanderState::new(),
             bpm: 120,
             bpm_target: 120,
             mouse_from: None,
@@ -307,8 +183,8 @@ impl EditorState {
             popup: Vec::new(),
             rofl_buffer: String::with_capacity(4),
         };
-        app.calc_bounds();
-        app.history.record(&app.engine.cells);
+        app.cursor.calc_bounds();
+        app.history.record(&app.o2.cells);
         app.history.saved_absolute_index = Some(app.history.offset + app.history.index);
         app
     }
@@ -335,20 +211,20 @@ impl EditorState {
             3.min(viewport_h / 4)
         };
 
-        if self.cx < self.scroll_x + margin_x {
-            self.scroll_x = self.cx.saturating_sub(margin_x);
-        } else if self.cx >= self.scroll_x + viewport_w.saturating_sub(margin_x) {
-            self.scroll_x = (self.cx + margin_x + 1).saturating_sub(viewport_w);
+        if self.cursor.cx < self.scroll_x + margin_x {
+            self.scroll_x = self.cursor.cx.saturating_sub(margin_x);
+        } else if self.cursor.cx >= self.scroll_x + viewport_w.saturating_sub(margin_x) {
+            self.scroll_x = (self.cursor.cx + margin_x + 1).saturating_sub(viewport_w);
         }
 
-        if self.cy < self.scroll_y + margin_y {
-            self.scroll_y = self.cy.saturating_sub(margin_y);
-        } else if self.cy >= self.scroll_y + viewport_h.saturating_sub(margin_y) {
-            self.scroll_y = (self.cy + margin_y + 1).saturating_sub(viewport_h);
+        if self.cursor.cy < self.scroll_y + margin_y {
+            self.scroll_y = self.cursor.cy.saturating_sub(margin_y);
+        } else if self.cursor.cy >= self.scroll_y + viewport_h.saturating_sub(margin_y) {
+            self.scroll_y = (self.cursor.cy + margin_y + 1).saturating_sub(viewport_h);
         }
 
-        let max_scroll_x = self.engine.w.saturating_sub(viewport_w);
-        let max_scroll_y = self.engine.h.saturating_sub(viewport_h);
+        let max_scroll_x = self.o2.w.saturating_sub(viewport_w);
+        let max_scroll_y = self.o2.h.saturating_sub(viewport_h);
         self.scroll_x = self.scroll_x.min(max_scroll_x);
         self.scroll_y = self.scroll_y.min(max_scroll_y);
     }
@@ -358,7 +234,7 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// let mut app = EditorState::new(10, 10, 1, 100);
     /// assert_eq!(app.content_bounds(), (1, 1));
@@ -368,10 +244,10 @@ impl EditorState {
     pub fn content_bounds(&self) -> (usize, usize) {
         let mut max_x = 0;
         let mut max_y = 0;
-        for (i, &c) in self.engine.cells.iter().enumerate() {
+        for (i, &c) in self.o2.cells.iter().enumerate() {
             if c != '.' {
-                max_x = max_x.max(i % self.engine.w);
-                max_y = max_y.max(i / self.engine.w);
+                max_x = max_x.max(i % self.o2.w);
+                max_y = max_y.max(i / self.o2.w);
             }
         }
         (max_x + 1, max_y + 1)
@@ -405,18 +281,35 @@ impl EditorState {
             }
         }
 
-        self.engine.w = file_w;
-        self.engine.h = file_h;
-        self.engine.cells = new_cells;
-        self.engine.locks = vec![false; self.engine.w * self.engine.h];
-        self.engine.ports = vec![None; self.engine.w * self.engine.h];
-        self.engine.port_names = vec![None; self.engine.w * self.engine.h];
+        self.o2.w = file_w;
+        self.o2.h = file_h;
+        self.o2.cells = new_cells;
+        self.o2.locks = vec![false; self.o2.w * self.o2.h];
+        self.o2.ports = vec![None; self.o2.w * self.o2.h];
+        self.o2.port_names = vec![None; self.o2.w * self.o2.h];
 
         self.history.clear();
-        self.history.record(&self.engine.cells);
+        self.history.record(&self.o2.cells);
         self.history.saved_absolute_index = Some(self.history.offset + self.history.index);
-        self.select(self.cx as isize, self.cy as isize, self.cw, self.ch);
+        self.select(
+            self.cursor.cx as isize,
+            self.cursor.cy as isize,
+            self.cursor.cw,
+            self.cursor.ch,
+        );
         self.update_ports();
+    }
+
+    /// Serialises the grid contents to a newline-delimited string.
+    pub fn to_grid_string(&self) -> String {
+        let mut content = String::with_capacity((self.o2.w + 1) * self.o2.h);
+        for y in 0..self.o2.h {
+            for x in 0..self.o2.w {
+                content.push(self.o2.cells[y * self.o2.w + x]);
+            }
+            content.push('\n');
+        }
+        content
     }
 
     /// Serialises the grid to disk at [`current_file`](EditorState::current_file).
@@ -425,13 +318,7 @@ impl EditorState {
             .current_file
             .clone()
             .unwrap_or_else(|| PathBuf::from("untitled.o2"));
-        let mut content = String::with_capacity((self.engine.w + 1) * self.engine.h);
-        for y in 0..self.engine.h {
-            for x in 0..self.engine.w {
-                content.push(self.engine.cells[y * self.engine.w + x]);
-            }
-            content.push('\n');
-        }
+        let content = self.to_grid_string();
         let success = std::fs::write(path, content.trim_end()).is_ok();
         if success {
             self.history.saved_absolute_index = Some(self.history.offset + self.history.index);
@@ -448,13 +335,13 @@ impl EditorState {
 
     /// Reverts the grid to the previous history snapshot (Ctrl+Z).
     pub fn undo(&mut self) {
-        self.history.undo(&mut self.engine.cells);
+        self.history.undo(&mut self.o2.cells);
         self.update_ports();
     }
 
     /// Re-applies a previously undone change (Ctrl+Shift+Z).
     pub fn redo(&mut self) {
-        self.history.redo(&mut self.engine.cells);
+        self.history.redo(&mut self.o2.cells);
         self.update_ports();
     }
 
@@ -463,7 +350,7 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// assert!(EditorState::is_allowed('.'));
     /// assert!(EditorState::is_allowed('A'));
@@ -472,8 +359,7 @@ impl EditorState {
     /// assert!(!EditorState::is_allowed('-'));
     /// ```
     pub fn is_allowed(g: char) -> bool {
-        let gl = g.to_ascii_lowercase();
-        gl == '.' || gl.is_ascii_alphanumeric() || "*#$!%:?=;_".contains(gl)
+        crate::core::glyph::is_allowed(g)
     }
 
     /// Returns the flat-array index for cell `(x, y)`, or `None` if out of bounds.
@@ -481,15 +367,15 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// let app = EditorState::new(10, 10, 1, 100);
     /// assert_eq!(app.index_at(0, 0), Some(0));
     /// assert_eq!(app.index_at(10, 0), None);
     /// ```
     pub fn index_at(&self, x: usize, y: usize) -> Option<usize> {
-        if x < self.engine.w && y < self.engine.h {
-            Some(y * self.engine.w + x)
+        if x < self.o2.w && y < self.o2.h {
+            Some(y * self.o2.w + x)
         } else {
             None
         }
@@ -500,7 +386,7 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// let app = EditorState::new(10, 10, 1, 100);
     /// assert!(app.is_in_bounds(0, 0));
@@ -508,7 +394,7 @@ impl EditorState {
     /// assert!(!app.is_in_bounds(10, 0));
     /// ```
     pub fn is_in_bounds(&self, x: isize, y: isize) -> bool {
-        x >= 0 && x < self.engine.w as isize && y >= 0 && y < self.engine.h as isize
+        x >= 0 && x < self.o2.w as isize && y >= 0 && y < self.o2.h as isize
     }
 
     /// Resizes the grid to at least `(new_w, new_h)`, preserving existing cell
@@ -516,13 +402,13 @@ impl EditorState {
     pub fn resize(&mut self, new_w: usize, new_h: usize) {
         let (bounds_w, bounds_h) = self.content_bounds();
 
-        let min_w = bounds_w.max(self.max_x + 1).max(self.cx + 1);
-        let min_h = bounds_h.max(self.max_y + 1).max(self.cy + 1);
+        let min_w = bounds_w.max(self.cursor.max_x + 1).max(self.cursor.cx + 1);
+        let min_h = bounds_h.max(self.cursor.max_y + 1).max(self.cursor.cy + 1);
 
         let final_w = new_w.max(min_w).max(1);
         let final_h = new_h.max(min_h).max(1);
 
-        if final_w == self.engine.w && final_h == self.engine.h {
+        if final_w == self.o2.w && final_h == self.o2.h {
             return;
         }
 
@@ -531,27 +417,32 @@ impl EditorState {
         let mut new_ports = vec![None; final_w * final_h];
         let mut new_port_names = vec![None; final_w * final_h];
 
-        for y in 0..self.engine.h.min(final_h) {
-            for x in 0..self.engine.w.min(final_w) {
-                let old_idx = y * self.engine.w + x;
+        for y in 0..self.o2.h.min(final_h) {
+            for x in 0..self.o2.w.min(final_w) {
+                let old_idx = y * self.o2.w + x;
                 let new_idx = y * final_w + x;
-                new_cells[new_idx] = self.engine.cells[old_idx];
-                new_locks[new_idx] = self.engine.locks[old_idx];
-                new_ports[new_idx] = self.engine.ports[old_idx];
-                new_port_names[new_idx] = self.engine.port_names[old_idx];
+                new_cells[new_idx] = self.o2.cells[old_idx];
+                new_locks[new_idx] = self.o2.locks[old_idx];
+                new_ports[new_idx] = self.o2.ports[old_idx];
+                new_port_names[new_idx] = self.o2.port_names[old_idx];
             }
         }
 
-        self.engine.w = final_w;
-        self.engine.h = final_h;
-        self.engine.cells = new_cells;
-        self.engine.locks = new_locks;
-        self.engine.ports = new_ports;
-        self.engine.port_names = new_port_names;
+        self.o2.w = final_w;
+        self.o2.h = final_h;
+        self.o2.cells = new_cells;
+        self.o2.locks = new_locks;
+        self.o2.ports = new_ports;
+        self.o2.port_names = new_port_names;
 
-        self.select(self.cx as isize, self.cy as isize, self.cw, self.ch);
+        self.select(
+            self.cursor.cx as isize,
+            self.cursor.cy as isize,
+            self.cursor.cw,
+            self.cursor.ch,
+        );
         self.history.clear();
-        self.history.record(&self.engine.cells);
+        self.history.record(&self.o2.cells);
         self.history.saved_absolute_index = None;
         self.update_ports();
     }
@@ -561,7 +452,7 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// let mut app = EditorState::new(5, 5, 1, 100);
     /// app.write_silent(2, 2, 'Z');
@@ -570,7 +461,7 @@ impl EditorState {
     /// ```
     pub fn glyph_at(&self, x: usize, y: usize) -> char {
         if let Some(idx) = self.index_at(x, y) {
-            self.engine.cells[idx]
+            self.o2.cells[idx]
         } else {
             '.'
         }
@@ -579,14 +470,14 @@ impl EditorState {
     /// Writes `g` to cell `(x, y)` without triggering any side-effects.
     pub fn write_silent(&mut self, x: usize, y: usize, g: char) {
         if let Some(idx) = self.index_at(x, y) {
-            self.engine.cells[idx] = if Self::is_allowed(g) { g } else { '.' };
+            self.o2.cells[idx] = if Self::is_allowed(g) { g } else { '.' };
         }
     }
 
     /// Returns `true` if the cell at `(x, y)` is locked for this frame.
     pub fn is_locked(&self, x: usize, y: usize) -> bool {
         if let Some(idx) = self.index_at(x, y) {
-            self.engine.locks[idx]
+            self.o2.locks[idx]
         } else {
             false
         }
@@ -595,7 +486,7 @@ impl EditorState {
     /// Returns the port style decoration for cell `(x, y)`, if any.
     pub fn port_at(&self, x: usize, y: usize) -> Option<StyleType> {
         if let Some(idx) = self.index_at(x, y) {
-            self.engine.ports[idx]
+            self.o2.ports[idx]
         } else {
             None
         }
@@ -604,7 +495,7 @@ impl EditorState {
     /// Returns the port name and originating operator glyph for cell `(x, y)`.
     pub fn port_name_at(&self, x: usize, y: usize) -> Option<(&'static str, char)> {
         if let Some(idx) = self.index_at(x, y) {
-            self.engine.port_names[idx]
+            self.o2.port_names[idx]
         } else {
             None
         }
@@ -619,15 +510,15 @@ impl EditorState {
         name: Option<(&'static str, char)>,
     ) {
         if let Some(idx) = self.index_at(x, y) {
-            self.engine.ports[idx] = val;
-            self.engine.port_names[idx] = name;
+            self.o2.ports[idx] = val;
+            self.o2.port_names[idx] = name;
         }
     }
 
     /// Reads the value stored in variable slot `key`.
     pub fn var_read(&self, key: char) -> char {
         if key.is_ascii() {
-            self.engine.variables[key as usize]
+            self.o2.variables[key as usize]
         } else {
             '.'
         }
@@ -636,7 +527,7 @@ impl EditorState {
     /// Writes `val` into variable slot `key`.
     pub fn var_write(&mut self, key: char, val: char) {
         if key.is_ascii() {
-            self.engine.variables[key as usize] = val;
+            self.o2.variables[key as usize] = val;
         }
     }
 
@@ -648,60 +539,45 @@ impl EditorState {
             self.bpm -= 1;
         }
 
-        self.engine.locks.fill(false);
-        self.engine.ports.fill(None);
-        self.engine.port_names.fill(None);
-        self.engine.variables.fill('.');
+        self.o2.locks.fill(false);
+        self.o2.ports.fill(None);
+        self.o2.port_names.fill(None);
+        self.o2.variables.fill('.');
 
-        let mut ops = std::mem::take(&mut self.engine.ops_cache);
-        ops.clear();
-
-        for y in 0..self.engine.h {
-            for x in 0..self.engine.w {
-                let g = self.engine.cells[y * self.engine.w + x];
-                if g != '.' && !g.is_ascii_digit() && EditorState::is_operator(g) {
-                    ops.push((x, y, g));
-                }
-            }
-        }
-
-        for &(x, y, g) in &ops {
-            let idx = y * self.engine.w + x;
-            if self.engine.locks[idx] {
-                continue;
-            }
-            crate::core::vm::run(self, x, y, g, false, false);
-        }
-
-        self.engine.ops_cache = ops;
+        self.scan_and_run(false);
     }
 
     /// Runs all operators in dry-run mode to update port decorations.
     pub fn update_ports(&mut self) {
-        self.engine.ports.fill(None);
-        self.engine.port_names.fill(None);
-        self.engine.locks.fill(false);
+        self.o2.ports.fill(None);
+        self.o2.port_names.fill(None);
+        self.o2.locks.fill(false);
 
-        let mut ops = std::mem::take(&mut self.engine.ops_cache);
+        self.scan_and_run(true);
+    }
+
+    fn scan_and_run(&mut self, dry_run: bool) {
+        let mut ops = std::mem::take(&mut self.o2.ops_cache);
         ops.clear();
 
-        for y in 0..self.engine.h {
-            for x in 0..self.engine.w {
-                let g = self.engine.cells[y * self.engine.w + x];
-                if g != '.' && !g.is_ascii_digit() && EditorState::is_operator(g) {
+        for y in 0..self.o2.h {
+            for x in 0..self.o2.w {
+                let g = self.o2.cells[y * self.o2.w + x];
+                if g != '.' && !g.is_ascii_digit() && crate::core::glyph::is_operator(g) {
                     ops.push((x, y, g));
                 }
             }
         }
+
         for &(x, y, g) in &ops {
-            let idx = y * self.engine.w + x;
-            if self.engine.locks[idx] {
+            let idx = y * self.o2.w + x;
+            if self.o2.locks[idx] {
                 continue;
             }
-            crate::core::vm::run(self, x, y, g, false, true);
+            crate::core::operators::run(self, x, y, g, false, dry_run);
         }
 
-        self.engine.ops_cache = ops;
+        self.o2.ops_cache = ops;
     }
 
     /// Returns `true` if `g` is a recognised operator glyph.
@@ -709,15 +585,14 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// assert!(EditorState::is_operator('A'));
     /// assert!(EditorState::is_operator('*'));
     /// assert!(!EditorState::is_operator('5'));
     /// ```
     pub fn is_operator(g: char) -> bool {
-        let gl = g.to_ascii_lowercase();
-        gl.is_ascii_alphabetic() || "*#$!%:?=;".contains(gl)
+        crate::core::glyph::is_operator(g)
     }
 
     /// Converts a base-36 glyph to its numeric value.
@@ -725,7 +600,7 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// assert_eq!(EditorState::value_of('0'), 0);
     /// assert_eq!(EditorState::value_of('9'), 9);
@@ -734,7 +609,7 @@ impl EditorState {
     /// assert_eq!(EditorState::value_of('.'), 0);
     /// ```
     pub fn value_of(g: char) -> usize {
-        g.to_digit(36).unwrap_or(0) as usize
+        crate::core::glyph::value_of(g)
     }
 
     /// Converts a numeric value to its base-36 glyph representation.
@@ -742,7 +617,7 @@ impl EditorState {
     /// # Examples
     ///
     /// ```
-    /// use o2_rs::core::app::EditorState;
+    /// use o2_rs::core::oxygen::EditorState;
     ///
     /// assert_eq!(EditorState::key_of(0, false), '0');
     /// assert_eq!(EditorState::key_of(10, false), 'a');
@@ -750,8 +625,7 @@ impl EditorState {
     /// assert_eq!(EditorState::key_of(36, false), '0');
     /// ```
     pub fn key_of(val: usize, uppercase: bool) -> char {
-        let c = std::char::from_digit((val % 36) as u32, 36).unwrap_or('0');
-        if uppercase { c.to_ascii_uppercase() } else { c }
+        crate::core::glyph::key_of(val, uppercase)
     }
 
     /// Reads the glyph at position `(x + dx, y + dy)`.
@@ -759,7 +633,7 @@ impl EditorState {
         let px = x as isize + dx;
         let py = y as isize + dy;
         if self.is_in_bounds(px, py) {
-            self.engine.cells[(py as usize) * self.engine.w + (px as usize)]
+            self.o2.cells[(py as usize) * self.o2.w + (px as usize)]
         } else {
             '.'
         }
@@ -795,9 +669,9 @@ impl EditorState {
         let px = x as isize + dx;
         let py = y as isize + dy;
         if self.is_in_bounds(px, py) {
-            let idx = (py as usize) * self.engine.w + (px as usize);
+            let idx = (py as usize) * self.o2.w + (px as usize);
             if should_lock {
-                self.engine.locks[idx] = true;
+                self.o2.locks[idx] = true;
             }
             if draws_port {
                 let port_type = if is_output {
@@ -807,9 +681,9 @@ impl EditorState {
                 } else {
                     StyleType::Input
                 };
-                self.engine.ports[idx] = Some(port_type);
-                let op_g = self.engine.cells[y * self.engine.w + x];
-                self.engine.port_names[idx] = name.map(|n| (n, op_g));
+                self.o2.ports[idx] = Some(port_type);
+                let op_g = self.o2.cells[y * self.o2.w + x];
+                self.o2.port_names[idx] = name.map(|n| (n, op_g));
             }
         }
     }
@@ -819,15 +693,15 @@ impl EditorState {
         let px = x as isize + dx;
         let py = y as isize + dy;
         if self.is_in_bounds(px, py) {
-            self.engine.locks[(py as usize) * self.engine.w + (px as usize)] = true;
+            self.o2.locks[(py as usize) * self.o2.w + (px as usize)] = true;
         }
     }
 
     /// Marks `(x, y)` as the operator cell itself with [`StyleType::Operator`] decoration.
     pub fn add_op_port(&mut self, x: usize, y: usize, name: Option<&'static str>) {
         if let Some(idx) = self.index_at(x, y) {
-            self.engine.ports[idx] = Some(StyleType::Operator);
-            self.engine.port_names[idx] = name.map(|n| (n, '.'));
+            self.o2.ports[idx] = Some(StyleType::Operator);
+            self.o2.port_names[idx] = name.map(|n| (n, '.'));
         }
     }
 
@@ -836,9 +710,9 @@ impl EditorState {
         let px = x as isize + dx;
         let py = y as isize + dy;
         if self.is_in_bounds(px, py) {
-            let idx = (py as usize) * self.engine.w + (px as usize);
-            self.engine.cells[idx] = g;
-            self.engine.locks[idx] = true;
+            let idx = (py as usize) * self.o2.w + (px as usize);
+            self.o2.cells[idx] = g;
+            self.o2.locks[idx] = true;
         }
     }
 
@@ -848,10 +722,10 @@ impl EditorState {
         let py = y as isize + dy;
 
         if self.is_in_bounds(px, py) {
-            let idx = (py as usize) * self.engine.w + (px as usize);
-            if self.engine.cells[idx] == '.' {
-                let old_idx = y * self.engine.w + x;
-                self.engine.cells[old_idx] = '.';
+            let idx = (py as usize) * self.o2.w + (px as usize);
+            if self.o2.cells[idx] == '.' {
+                let old_idx = y * self.o2.w + x;
+                self.o2.cells[old_idx] = '.';
                 self.write_port(x, y, dx, dy, g);
                 return;
             }
@@ -866,7 +740,7 @@ impl EditorState {
             let px = x as isize + dx;
             let py = y as isize + dy;
             if self.is_in_bounds(px, py)
-                && self.engine.cells[(py as usize) * self.engine.w + (px as usize)] == '*'
+                && self.o2.cells[(py as usize) * self.o2.w + (px as usize)] == '*'
             {
                 return true;
             }
@@ -888,9 +762,9 @@ impl EditorState {
             return min;
         }
 
-        let mut key = (self.engine.rng_state as usize)
-            .wrapping_add(y.wrapping_mul(self.engine.w).wrapping_add(x))
-            ^ (self.engine.f << 16);
+        let mut key = (self.o2.rng_state as usize)
+            .wrapping_add(y.wrapping_mul(self.o2.w).wrapping_add(x))
+            ^ (self.o2.f << 16);
 
         key = (key ^ 61) ^ (key >> 16);
         key = key.wrapping_add(key << 3);
@@ -903,21 +777,21 @@ impl EditorState {
 
     /// Manually triggers the operator under the cursor (Ctrl+P / Enter).
     pub fn trigger(&mut self) {
-        let g = self.glyph_at(self.cx, self.cy);
+        let g = self.glyph_at(self.cursor.cx, self.cursor.cy);
         if g != '.' && Self::is_operator(g) {
             self.update_ports();
-            crate::core::vm::run(self, self.cx, self.cy, g, true, false);
+            crate::core::operators::run(self, self.cursor.cx, self.cursor.cy, g, true, false);
         }
     }
 
     /// Copies the current selection to the system clipboard.
     pub fn copy(&mut self) {
         let mut s = String::new();
-        for y in self.min_y..=self.max_y {
-            for x in self.min_x..=self.max_x {
+        for y in self.cursor.min_y..=self.cursor.max_y {
+            for x in self.cursor.min_x..=self.cursor.max_x {
                 s.push(self.glyph_at(x, y));
             }
-            if y < self.max_y {
+            if y < self.cursor.max_y {
                 s.push('\n');
             }
         }
@@ -956,25 +830,16 @@ impl EditorState {
                 if self.mode == InputMode::Append && c == '.' {
                     continue;
                 }
-                self.write_silent(self.min_x + i, self.min_y + j, c);
+                self.write_silent(self.cursor.min_x + i, self.cursor.min_y + j, c);
             }
         }
 
         let w = lines[0].chars().count().saturating_sub(1) as isize;
         let h = lines.len().saturating_sub(1) as isize;
 
-        self.select(self.min_x as isize, self.min_y as isize, w, h);
-        self.history.record(&self.engine.cells);
+        self.select(self.cursor.min_x as isize, self.cursor.min_y as isize, w, h);
+        self.history.record(&self.o2.cells);
         self.update_ports();
-    }
-
-    pub(crate) fn calc_bounds(&mut self) {
-        let end_x = (self.cx as isize + self.cw).max(0) as usize;
-        let end_y = (self.cy as isize + self.ch).max(0) as usize;
-        self.min_x = self.cx.min(end_x);
-        self.max_x = self.cx.max(end_x);
-        self.min_y = self.cy.min(end_y);
-        self.max_y = self.cy.max(end_y);
     }
 
     /// Returns the names of all available MIDI output devices.
@@ -1013,19 +878,19 @@ impl EditorState {
 impl std::fmt::Debug for EditorState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EditorState")
-            .field("engine_w", &self.engine.w)
-            .field("engine_h", &self.engine.h)
+            .field("engine_w", &self.o2.w)
+            .field("engine_h", &self.o2.h)
             .field("grid_w", &self.grid_w)
             .field("grid_h", &self.grid_h)
             .field("scroll_x", &self.scroll_x)
             .field("scroll_y", &self.scroll_y)
-            .field("cx", &self.cx)
-            .field("cy", &self.cy)
-            .field("cw", &self.cw)
-            .field("ch", &self.ch)
+            .field("cx", &self.cursor.cx)
+            .field("cy", &self.cursor.cy)
+            .field("cw", &self.cursor.cw)
+            .field("ch", &self.cursor.ch)
             .field("mode", &self.mode)
             .field("paused", &self.paused)
-            .field("f", &self.engine.f)
+            .field("f", &self.o2.f)
             .field("bpm", &self.bpm)
             .field("bpm_target", &self.bpm_target)
             .field("last_input_was_mouse", &self.last_input_was_mouse)
@@ -1057,14 +922,14 @@ mod tests {
         app.load(input, None);
         for _ in 0..frames {
             app.operate();
-            app.engine.f += 1;
+            app.o2.f += 1;
         }
         let mut output = String::new();
-        for y in 0..app.engine.h {
-            for x in 0..app.engine.w {
+        for y in 0..app.o2.h {
+            for x in 0..app.o2.w {
                 output.push(app.glyph_at(x, y));
             }
-            if y < app.engine.h - 1 {
+            if y < app.o2.h - 1 {
                 output.push('\n');
             }
         }
@@ -1109,7 +974,7 @@ mod tests {
     #[test]
     fn test_glyph_at() {
         let mut app = create_app(3, 3);
-        app.engine.cells = vec!['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        app.o2.cells = vec!['1', '2', '3', '4', '5', '6', '7', '8', '9'];
         assert_eq!(app.glyph_at(0, 0), '1');
         assert_eq!(app.glyph_at(2, 0), '3');
         assert_eq!(app.glyph_at(1, 1), '5');
@@ -1192,15 +1057,15 @@ mod tests {
         app.write_silent(1, 1, '4');
 
         app.resize(4, 4);
-        assert_eq!(app.engine.w, 4);
-        assert_eq!(app.engine.h, 4);
+        assert_eq!(app.o2.w, 4);
+        assert_eq!(app.o2.h, 4);
         assert_eq!(app.glyph_at(0, 0), '1');
         assert_eq!(app.glyph_at(1, 1), '4');
         assert_eq!(app.glyph_at(2, 2), '.');
 
         app.resize(1, 1);
-        assert_eq!(app.engine.w, 2);
-        assert_eq!(app.engine.h, 2);
+        assert_eq!(app.o2.w, 2);
+        assert_eq!(app.o2.h, 2);
     }
 
     #[test]
@@ -1208,8 +1073,8 @@ mod tests {
         let mut app = create_app(1, 1);
         let content = "123\n456\n789";
         app.load(content, None);
-        assert_eq!(app.engine.w, 3);
-        assert_eq!(app.engine.h, 3);
+        assert_eq!(app.o2.w, 3);
+        assert_eq!(app.o2.h, 3);
         assert_eq!(app.glyph_at(0, 0), '1');
         assert_eq!(app.glyph_at(2, 0), '3');
         assert_eq!(app.glyph_at(0, 2), '7');
@@ -1345,7 +1210,7 @@ mod tests {
         app.write_silent(0, 1, '1');
         app.write_silent(2, 1, '2');
 
-        assert_eq!(app.engine.f, 0);
+        assert_eq!(app.o2.f, 0);
         app.operate();
         assert_eq!(app.glyph_at(1, 2), '3');
         assert!(app.is_locked(1, 2));
@@ -1359,12 +1224,12 @@ mod tests {
     fn test_random() {
         let mut app = create_app(5, 5);
         for i in 0..100 {
-            app.engine.f = i;
+            app.o2.f = i;
             let val = app.random(2, 2, 5, 10);
             assert!(val >= 5 && val <= 10);
         }
         for i in 0..100 {
-            app.engine.f = i;
+            app.o2.f = i;
             let val = app.random(3, 3, 10, 5);
             assert!(val >= 5 && val <= 10);
         }
@@ -1406,14 +1271,14 @@ mod tests {
         assert_eq!(app.scroll_x, 0);
         assert_eq!(app.scroll_y, 0);
 
-        app.cx = 15;
-        app.cy = 15;
+        app.cursor.cx = 15;
+        app.cursor.cy = 15;
         app.update_scroll(10, 10);
         assert_eq!(app.scroll_x, 8);
         assert_eq!(app.scroll_y, 8);
 
-        app.cx = 6;
-        app.cy = 8;
+        app.cursor.cx = 6;
+        app.cursor.cy = 8;
         app.update_scroll(10, 10);
         assert_eq!(app.scroll_x, 4);
         assert_eq!(app.scroll_y, 6);
@@ -1424,8 +1289,8 @@ mod tests {
         let mut app = create_app(20, 20);
         app.last_input_was_mouse = true;
 
-        app.cx = 15;
-        app.cy = 15;
+        app.cursor.cx = 15;
+        app.cursor.cy = 15;
         app.update_scroll(10, 10);
         assert_eq!(app.scroll_x, 6);
         assert_eq!(app.scroll_y, 6);
@@ -1442,15 +1307,15 @@ mod tests {
     #[test]
     fn test_operate_clears_state() {
         let mut app = create_app(5, 5);
-        app.engine.locks[0] = true;
-        app.engine.variables[97] = 'X';
-        app.engine.ports[0] = Some(StyleType::Input);
+        app.o2.locks[0] = true;
+        app.o2.variables[97] = 'X';
+        app.o2.ports[0] = Some(StyleType::Input);
 
         app.operate();
 
-        assert!(!app.engine.locks[0]);
-        assert_eq!(app.engine.variables[97], '.');
-        assert_eq!(app.engine.ports[0], None);
+        assert!(!app.o2.locks[0]);
+        assert_eq!(app.o2.variables[97], '.');
+        assert_eq!(app.o2.ports[0], None);
     }
 
     #[test]
@@ -1459,8 +1324,8 @@ mod tests {
         app.write_silent(1, 1, 'a');
         app.write_silent(0, 1, '1');
         app.write_silent(2, 1, '2');
-        app.cx = 1;
-        app.cy = 1;
+        app.cursor.cx = 1;
+        app.cursor.cy = 1;
 
         app.trigger();
 
@@ -1502,7 +1367,7 @@ mod tests {
             app2.random(5, 5, 0, 1_000_000)
         );
 
-        app2.engine.f = 1;
+        app2.o2.f = 1;
         assert_ne!(
             app1.random(5, 5, 0, 1_000_000),
             app2.random(5, 5, 0, 1_000_000)
@@ -1535,10 +1400,10 @@ mod tests {
 
         app.resize(0, 0);
 
-        assert_eq!(app.engine.w, 1);
-        assert_eq!(app.engine.h, 1);
-        assert_eq!(app.engine.cells.len(), 1);
-        assert_eq!(app.engine.locks.len(), 1);
+        assert_eq!(app.o2.w, 1);
+        assert_eq!(app.o2.h, 1);
+        assert_eq!(app.o2.cells.len(), 1);
+        assert_eq!(app.o2.locks.len(), 1);
     }
 
     #[test]
@@ -1831,6 +1696,39 @@ H...V2..H...V4..H...V6..H...V8..H...Va..
         assert_eq!(run_grid(initial, 16), frame_16);
         assert_eq!(run_grid(initial, 150), frame_150);
     }
+
+    #[test]
+    fn test_integration_all_operators() {
+        let content = "\
+aV4.0V3.....................................................
+............................................................
+.A..2A...A9.2A9.zA1.1Aa.1AA..B..2B...B9.2B9.zB1.zB2.1Bz.1BZ.
+.0F0.2F2.9F9.bFb.0F0.bFb.BFB.0F0.2F2.9F9.7F7.yFy.xFx.yFy.YFY
+..*...*...*...*...*...*...*...*...*...*...*...*...*...*...*.
+....1XA.1XA.................................................
+.I..1Ic.1IC..L..2L...L9.2L9.zL1.aLc.aLC..V0..Va2K0..2K.a.Vb.
+.0F0.bFb.BFB.0F0.0F0.0F0.2F2.1F1.aFa.AFA.3F3.4F4.3F3.4F4..F.
+..*...*...*...*...*...*...*...*...*...*...*...*...*...*...*.
+........................................H...................
+.M..2M...M9.2M9.zM2.2Ma.2MA..R..2R2.aRa.ARA..H...H...H...H..
+.0F0.0F0.0F0.iFi.yFy.kFk.KFK.0F0.2F2.aFa.AFA.*F*.NFN.SFS.WFW
+..*...*...*...*...*...*...*...*...*...*...*...*...*...*...*.
+............................................................
+.F..2F...F2.2F2..U..1U...U4.7U7..D...D1..C...C1.8C1..H...F*.
+.*F*..F...F..*F*..F..*F*..F..*F*.*F*.*F*.0F0.0F0.0F0.EFE..F.
+..*...*...*...*...*...*...*...*...*...*...*...*...*...*...*.
+.........................................................3..
+...........212G0a.........................21Xa.......2...J..
+.312Q.................52T0a..52P3...21O..........J...J...J..
+.0F0aFa.0a....0F0aFa....aFa.....3F3.0F0..0..aFa...F..2F2.3F3
+..*..*.........*..*......*.......*...*.......*....*...*...*.
+.............................#..P4.#........................
+.2Y2F2.2Y2F2.3YY3F3...bV5........F..........................
+....*.....*......*...............*..........................";
+
+        assert_eq!(run_grid(content, 1), content);
+        assert_eq!(run_grid(content, 2), content);
+    }
 }
 
 #[cfg(test)]
@@ -1870,10 +1768,10 @@ mod property_tests {
             app.write_silent(x, y, 'A');
             app.resize(target_w, target_h);
 
-            assert!(app.engine.w >= target_w);
-            assert!(app.engine.h >= target_h);
+            assert!(app.o2.w >= target_w);
+            assert!(app.o2.h >= target_h);
 
-            if x < app.engine.w && y < app.engine.h {
+            if x < app.o2.w && y < app.o2.h {
                 assert_eq!(app.glyph_at(x, y), 'A');
             }
         }
@@ -1881,7 +1779,7 @@ mod property_tests {
         #[test]
         fn prop_random_bounds(a in any::<usize>(), b in any::<usize>(), x in any::<usize>(), y in any::<usize>(), f in any::<usize>()) {
             let mut app = EditorState::new(10, 10, 42, 100);
-            app.engine.f = f;
+            app.o2.f = f;
             let val = app.random(x, y, a, b);
             let min = a.min(b);
             let max = a.max(b);
@@ -1893,13 +1791,13 @@ mod property_tests {
             let mut app = EditorState::new(100, 100, 42, 100);
             app.select(x, y, w, h);
 
-            assert!(app.min_x <= app.max_x);
-            assert!(app.min_y <= app.max_y);
-            assert!(app.cx >= app.min_x && app.cx <= app.max_x);
-            assert!(app.cy >= app.min_y && app.cy <= app.max_y);
+            assert!(app.cursor.min_x <= app.cursor.max_x);
+            assert!(app.cursor.min_y <= app.cursor.max_y);
+            assert!(app.cursor.cx >= app.cursor.min_x && app.cursor.cx <= app.cursor.max_x);
+            assert!(app.cursor.cy >= app.cursor.min_y && app.cursor.cy <= app.cursor.max_y);
 
-            assert!(app.max_x < app.engine.w);
-            assert!(app.max_y < app.engine.h);
+            assert!(app.cursor.max_x < app.o2.w);
+            assert!(app.cursor.max_y < app.o2.h);
         }
 
         #[test]

@@ -17,8 +17,8 @@
 
 //! Operator dispatcher: routes each glyph to its concrete implementation.
 //!
-//! The public entry point is [`run`], which is called once per cell per frame
-//! by [`EditorState::operate`].
+//! The public entry point is [`run()`], which is called once per cell per frame
+//! by [`EditorState::operate()`](crate::core::oxygen::EditorState::operate).
 //!
 //! # Operator categories
 //!
@@ -35,13 +35,33 @@
 //! its neighbours. A lowercase glyph only executes when an adjacent `'*'` bang
 //! is present or when `force` is `true` (manual trigger via Ctrl+P).
 
-use crate::core::app::EditorState;
+use crate::core::glyph::operator_name;
+use crate::core::io::midi::MIDI_NOTE_OFF;
 use crate::core::io::{MidiCc, MidiMessage, MidiNote, MidiPb};
-use crate::core::operator::operator_name;
+use crate::core::oxygen::EditorState;
 use crate::core::transpose::transpose;
 use crate::editor::commander::run_command;
 
-struct VmContext<'a> {
+/// Generates a binary operator function with the standard left-input / right-input /
+/// south-output port layout.  The `$f` closure receives `(lhs: usize, rhs: usize)`
+/// and returns the `usize` result that is then encoded as a base-36 glyph.
+macro_rules! op_binary {
+    ($name:ident, $lhs_name:literal, $rhs_name:literal, $f:expr) => {
+        fn $name(ctx: &mut OpContext) {
+            ctx.add_port(-1, 0, false, Some($lhs_name));
+            ctx.add_port(1, 0, false, Some($rhs_name));
+            ctx.add_port(0, 1, true, Some("out"));
+            ctx.execute(|app, x, y| {
+                let lhs = app.listen_val(x, y, -1, 0, 0, 36);
+                let rhs = app.listen_val(x, y, 1, 0, 0, 36);
+                let uc = app.should_uppercase(x, y);
+                app.write_port(x, y, 0, 1, EditorState::key_of($f(lhs, rhs), uc));
+            });
+        }
+    };
+}
+
+struct OpContext<'a> {
     app: &'a mut EditorState,
     x: usize,
     y: usize,
@@ -51,7 +71,7 @@ struct VmContext<'a> {
     triggered: bool,
 }
 
-impl<'a> VmContext<'a> {
+impl<'a> OpContext<'a> {
     #[inline]
     fn add_port(&mut self, dx: isize, dy: isize, is_output: bool, name: Option<&'static str>) {
         self.app.add_port(
@@ -124,7 +144,7 @@ pub fn run(app: &mut EditorState, x: usize, y: usize, g: char, force: bool, dry_
         app.add_op_port(x, y, Some(operator_name(gl)));
     }
 
-    let mut ctx = VmContext {
+    let mut ctx = OpContext {
         app,
         x,
         y,
@@ -175,57 +195,14 @@ pub fn run(app: &mut EditorState, x: usize, y: usize, g: char, force: bool, dry_
     }
 }
 
-fn op_add(ctx: &mut VmContext) {
-    ctx.add_port(-1, 0, false, Some("a"));
-    ctx.add_port(1, 0, false, Some("b"));
-    ctx.add_port(0, 1, true, Some("out"));
-    ctx.execute(|app, x, y| {
-        let a = app.listen_val(x, y, -1, 0, 0, 36);
-        let b = app.listen_val(x, y, 1, 0, 0, 36);
-        let uc = app.should_uppercase(x, y);
-        app.write_port(x, y, 0, 1, EditorState::key_of(a + b, uc));
-    });
-}
+op_binary!(op_add, "a", "b", |lhs, rhs| lhs + rhs);
+op_binary!(op_sub, "a", "b", |lhs: usize, rhs: usize| (rhs as isize
+    - lhs as isize)
+    .unsigned_abs());
+op_binary!(op_mult, "a", "b", |lhs, rhs| lhs * rhs);
+op_binary!(op_lesser, "a", "b", |lhs: usize, rhs: usize| lhs.min(rhs));
 
-fn op_sub(ctx: &mut VmContext) {
-    ctx.add_port(-1, 0, false, Some("a"));
-    ctx.add_port(1, 0, false, Some("b"));
-    ctx.add_port(0, 1, true, Some("out"));
-    ctx.execute(|app, x, y| {
-        let a = app.listen_val(x, y, -1, 0, 0, 36);
-        let b = app.listen_val(x, y, 1, 0, 0, 36);
-        let diff = (b as isize - a as isize).unsigned_abs();
-        let uc = app.should_uppercase(x, y);
-        app.write_port(x, y, 0, 1, EditorState::key_of(diff, uc));
-    });
-}
-
-fn op_mult(ctx: &mut VmContext) {
-    ctx.add_port(-1, 0, false, Some("a"));
-    ctx.add_port(1, 0, false, Some("b"));
-    ctx.add_port(0, 1, true, Some("out"));
-    ctx.execute(|app, x, y| {
-        let a = app.listen_val(x, y, -1, 0, 0, 36);
-        let b = app.listen_val(x, y, 1, 0, 0, 36);
-        let uc = app.should_uppercase(x, y);
-        app.write_port(x, y, 0, 1, EditorState::key_of(a * b, uc));
-    });
-}
-
-fn op_lesser(ctx: &mut VmContext) {
-    ctx.add_port(-1, 0, false, Some("a"));
-    ctx.add_port(1, 0, false, Some("b"));
-    ctx.add_port(0, 1, true, Some("out"));
-    ctx.execute(|app, x, y| {
-        let a = app.listen_val(x, y, -1, 0, 0, 36);
-        let b = app.listen_val(x, y, 1, 0, 0, 36);
-        let uc = app.should_uppercase(x, y);
-        let min_val = a.min(b);
-        app.write_port(x, y, 0, 1, EditorState::key_of(min_val, uc));
-    });
-}
-
-fn op_clock(ctx: &mut VmContext) {
+fn op_clock(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("rate"));
     ctx.add_port(1, 0, false, Some("mod"));
     ctx.add_port(0, 1, true, Some("out"));
@@ -233,27 +210,27 @@ fn op_clock(ctx: &mut VmContext) {
         let rate = app.listen_val(x, y, -1, 0, 1, 36);
         let m = app.listen_val(x, y, 1, 0, 0, 36);
         if m > 0 {
-            let val = (app.engine.f / rate) % m;
+            let val = (app.o2.f / rate) % m;
             let uc = app.should_uppercase(x, y);
             app.write_port(x, y, 0, 1, EditorState::key_of(val, uc));
         }
     });
 }
 
-fn op_delay(ctx: &mut VmContext) {
+fn op_delay(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("rate"));
     ctx.add_port(1, 0, false, Some("mod"));
     ctx.add_port(0, 1, true, Some("out"));
     ctx.execute(|app, x, y| {
         let rate = app.listen_val(x, y, -1, 0, 1, 36);
         let m = app.listen_val(x, y, 1, 0, 1, 36);
-        let res = app.engine.f % (m * rate);
+        let res = app.o2.f % (m * rate);
         let out_char = if res == 0 || m == 1 { '*' } else { '.' };
         app.write_port(x, y, 0, 1, out_char);
     });
 }
 
-fn op_if(ctx: &mut VmContext) {
+fn op_if(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("a"));
     ctx.add_port(1, 0, false, Some("b"));
     ctx.add_port(0, 1, true, Some("out"));
@@ -265,7 +242,7 @@ fn op_if(ctx: &mut VmContext) {
     });
 }
 
-fn op_gen(ctx: &mut VmContext) {
+fn op_gen(ctx: &mut OpContext) {
     ctx.add_port(-3, 0, false, Some("x"));
     ctx.add_port(-2, 0, false, Some("y"));
     ctx.add_port(-1, 0, false, Some("len"));
@@ -288,7 +265,7 @@ fn op_gen(ctx: &mut VmContext) {
     }
 }
 
-fn op_halt(ctx: &mut VmContext) {
+fn op_halt(ctx: &mut OpContext) {
     ctx.add_port(0, 1, true, Some("out"));
     ctx.execute(|app, x, y| {
         let val = app.listen(x, y, 0, 1);
@@ -296,7 +273,7 @@ fn op_halt(ctx: &mut VmContext) {
     });
 }
 
-fn op_inc(ctx: &mut VmContext) {
+fn op_inc(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("step"));
     ctx.add_port(1, 0, false, Some("mod"));
     ctx.add_port(0, 1, true, Some("out"));
@@ -314,7 +291,7 @@ fn op_inc(ctx: &mut VmContext) {
     });
 }
 
-fn op_jumper(ctx: &mut VmContext, g: char) {
+fn op_jumper(ctx: &mut OpContext, g: char) {
     if ctx.is_active {
         let upper = g.to_ascii_uppercase();
         let val = ctx.listen(0, -1);
@@ -335,7 +312,7 @@ fn op_jumper(ctx: &mut VmContext, g: char) {
     }
 }
 
-fn op_konkat(ctx: &mut VmContext) {
+fn op_konkat(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("len"));
     if ctx.is_active {
         let len = ctx.listen_val(-1, 0, 1, 36);
@@ -354,7 +331,7 @@ fn op_konkat(ctx: &mut VmContext) {
     }
 }
 
-fn op_read(ctx: &mut VmContext) {
+fn op_read(ctx: &mut OpContext) {
     ctx.add_port(-2, 0, false, Some("x"));
     ctx.add_port(-1, 0, false, Some("y"));
     if ctx.is_active {
@@ -369,7 +346,7 @@ fn op_read(ctx: &mut VmContext) {
     }
 }
 
-fn op_push(ctx: &mut VmContext) {
+fn op_push(ctx: &mut OpContext) {
     ctx.add_port(-2, 0, false, Some("key"));
     ctx.add_port(-1, 0, false, Some("len"));
     ctx.add_port(1, 0, false, Some("val"));
@@ -388,7 +365,7 @@ fn op_push(ctx: &mut VmContext) {
     }
 }
 
-fn op_query(ctx: &mut VmContext) {
+fn op_query(ctx: &mut OpContext) {
     ctx.add_port(-3, 0, false, Some("x"));
     ctx.add_port(-2, 0, false, Some("y"));
     ctx.add_port(-1, 0, false, Some("len"));
@@ -409,7 +386,7 @@ fn op_query(ctx: &mut VmContext) {
     }
 }
 
-fn op_rand(ctx: &mut VmContext) {
+fn op_rand(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("a"));
     ctx.add_port(1, 0, false, Some("b"));
     ctx.add_port(0, 1, true, Some("out"));
@@ -422,7 +399,7 @@ fn op_rand(ctx: &mut VmContext) {
     });
 }
 
-fn op_track(ctx: &mut VmContext) {
+fn op_track(ctx: &mut OpContext) {
     ctx.add_port(-2, 0, false, Some("key"));
     ctx.add_port(-1, 0, false, Some("len"));
     if ctx.is_active {
@@ -441,20 +418,20 @@ fn op_track(ctx: &mut VmContext) {
     }
 }
 
-fn op_uclid(ctx: &mut VmContext) {
+fn op_uclid(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("step"));
     ctx.add_port(1, 0, false, Some("max"));
     ctx.add_port(0, 1, true, Some("out"));
     ctx.execute(|app, x, y| {
         let step = app.listen_val(x, y, -1, 0, 0, 36) as u64;
         let max = app.listen_val(x, y, 1, 0, 1, 36) as u64;
-        let bucket = (step * (app.engine.f as u64 + max - 1)) % max + step;
+        let bucket = (step * (app.o2.f as u64 + max - 1)) % max + step;
         let out_char = if bucket >= max { '*' } else { '.' };
         app.write_port(x, y, 0, 1, out_char);
     });
 }
 
-fn op_var(ctx: &mut VmContext) {
+fn op_var(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("write"));
     ctx.add_port(1, 0, false, Some("read"));
     if ctx.is_active {
@@ -475,7 +452,7 @@ fn op_var(ctx: &mut VmContext) {
     }
 }
 
-fn op_write(ctx: &mut VmContext) {
+fn op_write(ctx: &mut OpContext) {
     ctx.add_port(-2, 0, false, Some("x"));
     ctx.add_port(-1, 0, false, Some("y"));
     ctx.add_port(1, 0, false, Some("val"));
@@ -490,7 +467,7 @@ fn op_write(ctx: &mut VmContext) {
     }
 }
 
-fn op_jymper(ctx: &mut VmContext, g: char) {
+fn op_jymper(ctx: &mut OpContext, g: char) {
     if ctx.is_active {
         let upper = g.to_ascii_uppercase();
         let val = ctx.listen(-1, 0);
@@ -511,7 +488,7 @@ fn op_jymper(ctx: &mut VmContext, g: char) {
     }
 }
 
-fn op_lerp(ctx: &mut VmContext) {
+fn op_lerp(ctx: &mut OpContext) {
     ctx.add_port(-1, 0, false, Some("rate"));
     ctx.add_port(1, 0, false, Some("target"));
     ctx.add_port(0, 1, true, Some("out"));
@@ -532,41 +509,41 @@ fn op_lerp(ctx: &mut VmContext) {
     });
 }
 
-fn op_east(ctx: &mut VmContext, g: char) {
+fn op_east(ctx: &mut OpContext, g: char) {
     ctx.clear_port();
     ctx.execute(|app, x, y| app.move_op(x, y, 1, 0, g));
 }
 
-fn op_west(ctx: &mut VmContext, g: char) {
+fn op_west(ctx: &mut OpContext, g: char) {
     ctx.clear_port();
     ctx.execute(|app, x, y| app.move_op(x, y, -1, 0, g));
 }
 
-fn op_north(ctx: &mut VmContext, g: char) {
+fn op_north(ctx: &mut OpContext, g: char) {
     ctx.clear_port();
     ctx.execute(|app, x, y| app.move_op(x, y, 0, -1, g));
 }
 
-fn op_south(ctx: &mut VmContext, g: char) {
+fn op_south(ctx: &mut OpContext, g: char) {
     ctx.clear_port();
     ctx.execute(|app, x, y| app.move_op(x, y, 0, 1, g));
 }
 
-fn op_bang(ctx: &mut VmContext) {
+fn op_bang(ctx: &mut OpContext) {
     ctx.clear_port();
     ctx.execute(|app, x, y| app.write_silent(x, y, '.'));
 }
 
-fn op_comment(ctx: &mut VmContext) {
+fn op_comment(ctx: &mut OpContext) {
     if ctx.is_active {
         ctx.clear_port();
         ctx.lock(0, 0);
         let mut i = 1;
-        while ctx.x + i < ctx.app.engine.w {
+        while ctx.x + i < ctx.app.o2.w {
             let px = ctx.x + i;
-            let idx = ctx.y * ctx.app.engine.w + px;
-            ctx.app.engine.locks[idx] = true;
-            if ctx.app.engine.cells[idx] == '#' {
+            let idx = ctx.y * ctx.app.o2.w + px;
+            ctx.app.o2.locks[idx] = true;
+            if ctx.app.o2.cells[idx] == '#' {
                 break;
             }
             i += 1;
@@ -574,7 +551,7 @@ fn op_comment(ctx: &mut VmContext) {
     }
 }
 
-fn op_midi_mono(ctx: &mut VmContext, g: char) {
+fn op_midi_mono(ctx: &mut OpContext, g: char) {
     ctx.add_port(1, 0, false, Some("channel"));
     ctx.add_port(2, 0, false, Some("octave"));
     ctx.add_port(3, 0, false, Some("note"));
@@ -629,7 +606,11 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
                 if is_mono {
                     if let Some(existing) = &mut app.midi.mono_stack[channel] {
                         if existing.is_played {
-                            kill_notes.push([0x80 + existing.channel, existing.note_id, 0]);
+                            kill_notes.push([
+                                MIDI_NOTE_OFF + existing.channel,
+                                existing.note_id,
+                                0,
+                            ]);
                         }
                         app.midi.mono_stack[channel] = None;
                     }
@@ -640,7 +621,7 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
                             && note.note == note_g
                         {
                             if note.is_played {
-                                kill_notes.push([0x80 + note.channel, note.note_id, 0]);
+                                kill_notes.push([MIDI_NOTE_OFF + note.channel, note.note_id, 0]);
                             }
                             false
                         } else {
@@ -668,7 +649,11 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
                             skip_note_on = true;
                         } else {
                             if existing.is_played {
-                                kill_notes.push([0x80 + existing.channel, existing.note_id, 0]);
+                                kill_notes.push([
+                                    MIDI_NOTE_OFF + existing.channel,
+                                    existing.note_id,
+                                    0,
+                                ]);
                             }
                         }
                     }
@@ -690,7 +675,11 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
                                 true
                             } else {
                                 if note.is_played {
-                                    kill_notes.push([0x80 + note.channel, note.note_id, 0]);
+                                    kill_notes.push([
+                                        MIDI_NOTE_OFF + note.channel,
+                                        note.note_id,
+                                        0,
+                                    ]);
                                 }
                                 false
                             }
@@ -712,7 +701,7 @@ fn op_midi_mono(ctx: &mut VmContext, g: char) {
     });
 }
 
-fn op_cc(ctx: &mut VmContext) {
+fn op_cc(ctx: &mut OpContext) {
     ctx.add_port(1, 0, false, Some("channel"));
     ctx.add_port(2, 0, false, Some("knob"));
     ctx.add_port(3, 0, false, Some("value"));
@@ -748,7 +737,7 @@ fn op_cc(ctx: &mut VmContext) {
     });
 }
 
-fn op_pb(ctx: &mut VmContext) {
+fn op_pb(ctx: &mut OpContext) {
     ctx.add_port(1, 0, false, Some("channel"));
     ctx.add_port(2, 0, false, Some("lsb"));
     ctx.add_port(3, 0, false, Some("msb"));
@@ -783,7 +772,7 @@ fn op_pb(ctx: &mut VmContext) {
     });
 }
 
-fn op_osc(ctx: &mut VmContext) {
+fn op_osc(ctx: &mut OpContext) {
     ctx.add_port(1, 0, false, Some("path"));
     if ctx.is_active {
         for i in 2..=36 {
@@ -811,7 +800,7 @@ fn op_osc(ctx: &mut VmContext) {
     });
 }
 
-fn op_udp(ctx: &mut VmContext) {
+fn op_udp(ctx: &mut OpContext) {
     if ctx.is_active {
         for i in 1..=36 {
             let g = ctx.listen(i, 0);
@@ -837,7 +826,7 @@ fn op_udp(ctx: &mut VmContext) {
     });
 }
 
-fn op_self(ctx: &mut VmContext) {
+fn op_self(ctx: &mut OpContext) {
     if ctx.is_active {
         ctx.app.add_op_port(ctx.x, ctx.y, Some("self"));
         for i in 1..=36 {
@@ -866,7 +855,7 @@ fn op_self(ctx: &mut VmContext) {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::app::EditorState;
+    use crate::core::oxygen::EditorState;
 
     fn run_grid(input: &str, frames: usize) -> String {
         let input = input.trim_matches('\n');
@@ -882,14 +871,14 @@ mod tests {
         app.load(input, None);
         for _ in 0..frames {
             app.operate();
-            app.engine.f += 1;
+            app.o2.f += 1;
         }
         let mut output = String::new();
-        for y in 0..app.engine.h {
-            for x in 0..app.engine.w {
+        for y in 0..app.o2.h {
+            for x in 0..app.o2.w {
                 output.push(app.glyph_at(x, y));
             }
-            if y < app.engine.h - 1 {
+            if y < app.o2.h - 1 {
                 output.push('\n');
             }
         }
@@ -1192,7 +1181,7 @@ mod tests {
         let mut app = EditorState::new(5, 5, 42, 100);
         app.load("1A2\n...", None);
 
-        crate::core::vm::run(&mut app, 1, 0, 'A', false, true);
+        crate::core::operators::run(&mut app, 1, 0, 'A', false, true);
 
         assert_eq!(app.glyph_at(1, 1), '.');
         assert_eq!(app.port_at(0, 0), Some(crate::ui::theme::StyleType::Haste));
@@ -1205,10 +1194,10 @@ mod tests {
         let mut app = EditorState::new(5, 5, 42, 100);
         app.load("1a2\n...", None);
 
-        crate::core::vm::run(&mut app, 1, 0, 'a', false, false);
+        crate::core::operators::run(&mut app, 1, 0, 'a', false, false);
         assert_eq!(app.glyph_at(1, 1), '.');
 
-        crate::core::vm::run(&mut app, 1, 0, 'a', true, false);
+        crate::core::operators::run(&mut app, 1, 0, 'a', true, false);
         assert_eq!(app.glyph_at(1, 1), '3');
     }
 
@@ -1216,10 +1205,10 @@ mod tests {
     fn test_operator_out_of_bounds_safety() {
         let mut app = EditorState::new(2, 2, 42, 100);
         app.load("X1\n..", None);
-        crate::core::vm::run(&mut app, 0, 0, 'X', false, false);
+        crate::core::operators::run(&mut app, 0, 0, 'X', false, false);
 
         app.load("N.\n..", None);
-        crate::core::vm::run(&mut app, 0, 0, 'N', false, false);
+        crate::core::operators::run(&mut app, 0, 0, 'N', false, false);
         assert_eq!(app.glyph_at(0, 0), '*');
     }
 

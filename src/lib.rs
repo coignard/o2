@@ -21,7 +21,7 @@
 //! esoteric programming language and terminal livecoding environment.
 //!
 //! This library exposes the core engine of `o2`, allowing other developers to:
-//! - Run the grid simulation ([`core::app`], [`core::vm`]).
+//! - Run the grid simulation ([`core::oxygen`], [`core::operators`]).
 //! - Send MIDI, OSC, and UDP output ([`core::io`]).
 //! - Map glyphs to MIDI note IDs ([`core::transpose`]).
 //! - Control tempo programmatically ([`editor::clock`]).
@@ -33,8 +33,8 @@
 //!
 //! ```text
 //! Grid cells (Vec<char>)
-//!     → core::vm::run()                    per operator per frame
-//!     → core::app::EditorState::operate()  full-frame tick
+//!     → core::operators::run()              per operator per frame
+//!     → core::oxygen::EditorState::operate() full-frame tick
 //!     → core::io::MidiState::run()         flush MIDI / OSC / UDP
 //!     → ui::render::draw()                 render to terminal
 //! ```
