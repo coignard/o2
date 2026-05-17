@@ -153,10 +153,12 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                     } else if let MouseEventKind::ScrollDown = mouse_event.kind {
                         *selected = main_menu_down(*selected);
                     } else if let MouseEventKind::Down(MouseButton::Left) = mouse_event.kind
-                        && rel_y <= 17 && !MENU_EMPTY_ROWS.contains(&rel_y) {
-                            *selected = rel_y;
-                            trigger_action = true;
-                        }
+                        && rel_y <= 17
+                        && !MENU_EMPTY_ROWS.contains(&rel_y)
+                    {
+                        *selected = rel_y;
+                        trigger_action = true;
+                    }
                 }
                 PopupType::MidiMenu { selected, devices } => {
                     if let MouseEventKind::ScrollUp = mouse_event.kind {

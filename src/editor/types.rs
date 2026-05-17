@@ -118,8 +118,7 @@ pub enum PopupType {
 }
 
 /// Cursor position, selection geometry, and derived bounding box.
-#[derive(Debug, Clone, Copy)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct CursorState {
     /// Cursor column.
     pub cx: usize,
@@ -158,8 +157,7 @@ impl CursorState {
 }
 
 /// State for the commander prompt bar.
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct CommanderState {
     /// Whether the commander prompt is currently open.
     pub active: bool,
