@@ -28,6 +28,9 @@ rosc = "0.11.4"
 [dev-dependencies]
 proptest = "1.11.0"
 criterion = "0.8.2"
+soft_ratatui = "0.2.0"
+eframe = "0.34.2"
+egui_ratatui = "2.2.0"
 
 [[bench]]
 name = "engine_bench"
