@@ -20,3 +20,4 @@ pub mod commander;
 pub mod cursor;
 pub mod history;
 pub mod input;
+pub mod types;
