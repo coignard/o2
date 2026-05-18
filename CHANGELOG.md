@@ -1,28 +1,31 @@
 # Changelog
 
-## 0.2.0
+## 0.2.1
+
+### Added
+
+- `--monochrome` CLI flag under a new Display options group; renders the entire UI in pure black and white instead of the full colour palette, including the grid, status bar, popups, and prompt dialogs
+
+### Fixed
+
+- Scroll now triggers only when the cursor leaves the visible area, instead of three cells early; the previous look-ahead margin caused the view to shift before the cursor reached the viewport edge
 
 ### Changed
 
-- Renamed `core::app` module to `core::oxygen`, `core::vm` to `core::operators`,
-  and `core::operator` to `core::glyph`
-- Split `EditorState` fields into dedicated sub-structs: `o2` for the core engine,
-  `cursor` for selection state, and `commander` for the command prompt state
+- Renamed `core::app` module to `core::oxygen`, `core::vm` to `core::operators`, and `core::operator` to `core::glyph`
+- Split `EditorState` fields into dedicated sub-structs: `o2` for the core engine, `cursor` for selection state, and `commander` for the command prompt state
 - Decomposed `draw()` in `render.rs` into `draw_grid()` and `draw_status_bar()`
 - Decomposed `draw_popup_content()` into individual per-variant functions
 - Extracted `handle_popup_key()` into a standalone function in `input.rs`
 - Extracted `parse_command()` helper in `commander.rs`
 - Extracted `grid_bounds()` helper method in `cursor.rs`
 - Extracted `BPM_MIN` and `BPM_MAX` constants in `clock.rs`
-- Extracted `MIDI_NOTE_ON`, `MIDI_NOTE_OFF`, `MIDI_CC` and related byte constants
-  in `midi.rs`
-- Version string in the status bar now reads from `CARGO_PKG_VERSION` at compile time
-  instead of being hardcoded
+- Extracted `MIDI_NOTE_ON`, `MIDI_NOTE_OFF`, `MIDI_CC` and related byte constants in `midi.rs`
+- Version string in the status bar now reads from `CARGO_PKG_VERSION` at compile time instead of being hardcoded
 
 ### Added
 
-- `send_clock_pulse()` method on `MidiState` for direct clock pulse dispatch,
-  bypassing the OSC/Bidule forwarding path to preserve tight timing
+- `send_clock_pulse()` method on `MidiState` for direct clock pulse dispatch, bypassing the OSC/Bidule forwarding path to preserve tight timing
 - `History::with_limit()` constructor
 - `editor::types` module
 
