@@ -94,7 +94,7 @@ struct UiChar {
     bg: Color,
 }
 
-fn resolve_colors(style: StyleType, monochrome: bool) -> (Color, Color) {
+fn resolve_colors(style: StyleType, monochrome: bool, contrast: bool) -> (Color, Color) {
     let (fg, bg) = style.colors();
     if monochrome {
         if bg.is_some() {
@@ -104,6 +104,8 @@ fn resolve_colors(style: StyleType, monochrome: bool) -> (Color, Color) {
         } else {
             (BG, BG)
         }
+    } else if contrast && matches!(style, StyleType::Default | StyleType::Locked) {
+        (F_HIGH, BG)
     } else {
         (fg.unwrap_or(crate::ui::theme::F_LOW), bg.unwrap_or(BG))
     }
@@ -116,8 +118,9 @@ fn write_ui(
     limit: usize,
     style: StyleType,
     monochrome: bool,
+    contrast: bool,
 ) {
-    let (fg, bg) = resolve_colors(style, monochrome);
+    let (fg, bg) = resolve_colors(style, monochrome, contrast);
 
     for (i, c) in text.chars().take(limit).enumerate() {
         if offset + i < row.len() {
@@ -161,7 +164,7 @@ fn draw_grid(f: &mut Frame, app: &EditorState, area: Rect) {
                 };
 
                 let theme_type = make_style(app, x, y, display_glyph, selection_glyph);
-                let (fg, bg) = resolve_colors(theme_type, app.monochrome);
+                let (fg, bg) = resolve_colors(theme_type, app.monochrome, app.contrast);
                 let s = Style::new().fg(fg).bg(bg);
 
                 (display_glyph, s)
@@ -246,7 +249,8 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         "empty".to_string()
     };
     let mono = app.monochrome;
-    write_ui(&mut ui_l1, &inspect, 0, gw - 1, StyleType::Input, mono);
+    let contrast = app.contrast;
+    write_ui(&mut ui_l1, &inspect, 0, gw - 1, StyleType::Input, mono, contrast);
 
     let mode_char = match app.mode {
         InputMode::Normal => "",
@@ -261,7 +265,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         InputMode::Selection => StyleType::Selected,
         InputMode::Slide => StyleType::Reader,
     };
-    write_ui(&mut ui_l1, &cur_str, gw, gw, cur_style, mono);
+    write_ui(&mut ui_l1, &cur_str, gw, gw, cur_style, mono, contrast);
 
     write_ui(
         &mut ui_l1,
@@ -270,6 +274,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         gw,
         StyleType::Input,
         mono,
+        contrast,
     );
     write_ui(
         &mut ui_l1,
@@ -278,6 +283,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         gw,
         StyleType::Input,
         mono,
+        contrast,
     );
 
     let io_count = app.midi.stack.len()
@@ -293,6 +299,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         gw - 1,
         StyleType::Input,
         mono,
+        contrast,
     );
 
     let io_in_msg = if app.o2.f < 250 {
@@ -307,6 +314,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         gw * 4,
         StyleType::Input,
         mono,
+        contrast,
     );
 
     if app.commander.active {
@@ -315,7 +323,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             app.commander.query,
             if app.o2.f % 2 == 0 { "_" } else { "" }
         );
-        write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input, mono);
+        write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input, mono, contrast);
     } else {
         write_ui(
             &mut ui_l2,
@@ -324,6 +332,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             gw,
             StyleType::Input,
             mono,
+            contrast,
         );
         write_ui(
             &mut ui_l2,
@@ -332,6 +341,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             gw,
             StyleType::Input,
             mono,
+            contrast,
         );
         write_ui(
             &mut ui_l2,
@@ -340,6 +350,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             gw,
             StyleType::Input,
             mono,
+            contrast,
         );
 
         let diff = app.bpm_target as isize - app.bpm as isize;
@@ -366,7 +377,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         } else {
             StyleType::Input
         };
-        write_ui(&mut ui_l2, &clock_str, gw * 3, gw, clock_style, mono);
+        write_ui(&mut ui_l2, &clock_str, gw * 3, gw, clock_style, mono, contrast);
 
         let vars: String = app
             .o2
@@ -388,7 +399,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
                 d.push_str(&vars[..var_offset]);
                 d.chars().take(max).collect()
             };
-            write_ui(&mut ui_l2, &disp, gw * 4, max, StyleType::Input, mono);
+            write_ui(&mut ui_l2, &disp, gw * 4, max, StyleType::Input, mono, contrast);
         }
 
         let io_out_msg = if app.o2.f < 250 {
@@ -403,6 +414,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             gw * 4,
             StyleType::Input,
             mono,
+            contrast,
         );
     }
 

@@ -138,6 +138,12 @@ struct Cli {
     #[arg(long, help_heading = "Display options", verbatim_doc_comment)]
     monochrome: bool,
 
+    /// Use colours only where they aid usability: editing
+    /// elements and menus stay coloured; grid dots and
+    /// crosses are rendered in white.
+    #[arg(long, help_heading = "Display options", verbatim_doc_comment)]
+    contrast: bool,
+
     #[arg(value_name = "file", hide = true)]
     file: Option<PathBuf>,
 }
@@ -335,6 +341,7 @@ fn main() -> Result<()> {
     app.set_bpm(cli.bpm);
     app.midi.osc_midi_bidule = cli.osc_midi_bidule.clone();
     app.monochrome = cli.monochrome;
+    app.contrast = cli.contrast;
 
     if let Some(path) = &cli.file
         && let Ok(content) = std::fs::read_to_string(path)

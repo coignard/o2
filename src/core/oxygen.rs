@@ -143,6 +143,10 @@ pub struct EditorState {
     /// When `true`, the renderer uses only black and white instead of the full colour palette.
     pub monochrome: bool,
 
+    /// When `true`, grid dots and crosses are rendered in white while all
+    /// other UI elements (menus, editing, status bar) retain their colours.
+    pub contrast: bool,
+
     /// ROFL BUFFER!!!
     pub rofl_buffer: String,
 }
@@ -186,6 +190,7 @@ impl EditorState {
             midi_bclock: false,
             popup: Vec::new(),
             monochrome: false,
+            contrast: false,
             rofl_buffer: String::with_capacity(4),
         };
         app.cursor.calc_bounds();
