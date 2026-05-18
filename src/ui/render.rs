@@ -33,7 +33,7 @@
 
 use crate::core::oxygen::{EditorState, InputMode, PopupType, PromptPurpose};
 use crate::editor::input::autocomplete_path;
-use crate::ui::theme::{B_INV, BG, F_MED, StyleType, darken};
+use crate::ui::theme::{B_INV, BG, F_HIGH, F_INV, F_MED, StyleType, darken};
 use ratatui::{
     Frame,
     layout::{Constraint, HorizontalAlignment, Layout, Rect},
@@ -94,10 +94,23 @@ struct UiChar {
     bg: Color,
 }
 
-fn write_ui(row: &mut [UiChar], text: &str, offset: usize, limit: usize, style: StyleType) {
+fn resolve_colors(style: StyleType, monochrome: bool) -> (Color, Color) {
     let (fg, bg) = style.colors();
-    let fg = fg.unwrap_or(crate::ui::theme::F_LOW);
-    let bg = bg.unwrap_or(BG);
+    if monochrome {
+        if bg.is_some() {
+            (F_INV, F_HIGH)
+        } else if fg.is_some() {
+            (F_HIGH, BG)
+        } else {
+            (BG, BG)
+        }
+    } else {
+        (fg.unwrap_or(crate::ui::theme::F_LOW), bg.unwrap_or(BG))
+    }
+}
+
+fn write_ui(row: &mut [UiChar], text: &str, offset: usize, limit: usize, style: StyleType, monochrome: bool) {
+    let (fg, bg) = resolve_colors(style, monochrome);
 
     for (i, c) in text.chars().take(limit).enumerate() {
         if offset + i < row.len() {
@@ -141,12 +154,8 @@ fn draw_grid(f: &mut Frame, app: &EditorState, area: Rect) {
                 };
 
                 let theme_type = make_style(app, x, y, display_glyph, selection_glyph);
-                let (fg, bg) = theme_type.colors();
-
-                let mut s = Style::new().bg(bg.unwrap_or(BG));
-                if let Some(c) = fg {
-                    s = s.fg(c);
-                }
+                let (fg, bg) = resolve_colors(theme_type, app.monochrome);
+                let s = Style::new().fg(fg).bg(bg);
 
                 (display_glyph, s)
             };
@@ -229,7 +238,8 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
     } else {
         "empty".to_string()
     };
-    write_ui(&mut ui_l1, &inspect, 0, gw - 1, StyleType::Input);
+    let mono = app.monochrome;
+    write_ui(&mut ui_l1, &inspect, 0, gw - 1, StyleType::Input, mono);
 
     let mode_char = match app.mode {
         InputMode::Normal => "",
@@ -244,7 +254,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         InputMode::Selection => StyleType::Selected,
         InputMode::Slide => StyleType::Reader,
     };
-    write_ui(&mut ui_l1, &cur_str, gw, gw, cur_style);
+    write_ui(&mut ui_l1, &cur_str, gw, gw, cur_style, mono);
 
     write_ui(
         &mut ui_l1,
@@ -252,6 +262,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         gw * 2,
         gw,
         StyleType::Input,
+        mono,
     );
     write_ui(
         &mut ui_l1,
@@ -259,6 +270,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         gw * 3,
         gw,
         StyleType::Input,
+        mono,
     );
 
     let io_count = app.midi.stack.len()
@@ -267,14 +279,14 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
 
     let io_str = "|".repeat(io_count.min(gw.saturating_sub(1)));
     let io_inspect = format!("{:.<1$}", io_str, gw.saturating_sub(1));
-    write_ui(&mut ui_l1, &io_inspect, gw * 4, gw - 1, StyleType::Input);
+    write_ui(&mut ui_l1, &io_inspect, gw * 4, gw - 1, StyleType::Input, mono);
 
     let io_in_msg = if app.o2.f < 250 {
         format!("< {}", app.midi.input_device_name)
     } else {
         String::new()
     };
-    write_ui(&mut ui_l1, &io_in_msg, gw * 5, gw * 4, StyleType::Input);
+    write_ui(&mut ui_l1, &io_in_msg, gw * 5, gw * 4, StyleType::Input, mono);
 
     if app.commander.active {
         let cmd_str = format!(
@@ -282,7 +294,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             app.commander.query,
             if app.o2.f % 2 == 0 { "_" } else { "" }
         );
-        write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input);
+        write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input, mono);
     } else {
         write_ui(
             &mut ui_l2,
@@ -290,6 +302,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             0,
             gw,
             StyleType::Input,
+            mono,
         );
         write_ui(
             &mut ui_l2,
@@ -297,6 +310,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             gw,
             gw,
             StyleType::Input,
+            mono,
         );
         write_ui(
             &mut ui_l2,
@@ -304,6 +318,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             gw * 2,
             gw,
             StyleType::Input,
+            mono,
         );
 
         let diff = app.bpm_target as isize - app.bpm as isize;
@@ -330,7 +345,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         } else {
             StyleType::Input
         };
-        write_ui(&mut ui_l2, &clock_str, gw * 3, gw, clock_style);
+        write_ui(&mut ui_l2, &clock_str, gw * 3, gw, clock_style, mono);
 
         let vars: String = app
             .o2
@@ -352,7 +367,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
                 d.push_str(&vars[..var_offset]);
                 d.chars().take(max).collect()
             };
-            write_ui(&mut ui_l2, &disp, gw * 4, max, StyleType::Input);
+            write_ui(&mut ui_l2, &disp, gw * 4, max, StyleType::Input, mono);
         }
 
         let io_out_msg = if app.o2.f < 250 {
@@ -360,7 +375,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         } else {
             String::new()
         };
-        write_ui(&mut ui_l2, &io_out_msg, gw * 5, gw * 4, StyleType::Input);
+        write_ui(&mut ui_l2, &io_out_msg, gw * 5, gw * 4, StyleType::Input, mono);
     }
 
     let status_lines = vec![spans_to_line(&ui_l1), spans_to_line(&ui_l2)];
@@ -925,10 +940,15 @@ fn draw_prompt_popup(
     let mut spans = vec![Span::styled(" ", popup_style)];
 
     let blink = app.o2.f % 2 == 0;
-    let cursor_style = if blink {
-        Style::new().fg(B_INV).bg(BG)
+    let (cursor_fg_a, cursor_bg_a, cursor_fg_b, cursor_bg_b) = if app.monochrome {
+        (F_HIGH, F_INV, F_INV, F_HIGH)
     } else {
-        Style::new().fg(BG).bg(B_INV)
+        (B_INV, BG, BG, B_INV)
+    };
+    let cursor_style = if blink {
+        Style::new().fg(cursor_fg_a).bg(cursor_bg_a)
+    } else {
+        Style::new().fg(cursor_fg_b).bg(cursor_bg_b)
     };
 
     for (i, c) in input.chars().enumerate() {
@@ -939,7 +959,11 @@ fn draw_prompt_popup(
         }
     }
 
-    let ac_color = darken(B_INV, 60);
+    let (ac_fg, ac_bg) = if app.monochrome {
+        (F_INV, F_HIGH)
+    } else {
+        (darken(B_INV, 60), B_INV)
+    };
 
     if cursor == input.chars().count() {
         if !autocomplete_str.is_empty() {
@@ -948,7 +972,7 @@ fn draw_prompt_popup(
             let rest: String = ac_chars.collect();
             spans.push(Span::styled(first_char.to_string(), cursor_style));
             if !rest.is_empty() {
-                spans.push(Span::styled(rest, Style::new().fg(ac_color).bg(B_INV)));
+                spans.push(Span::styled(rest, Style::new().fg(ac_fg).bg(ac_bg)));
             }
         } else {
             spans.push(Span::styled(" ", cursor_style));
@@ -956,7 +980,7 @@ fn draw_prompt_popup(
     } else if !autocomplete_str.is_empty() {
         spans.push(Span::styled(
             autocomplete_str,
-            Style::new().fg(ac_color).bg(B_INV),
+            Style::new().fg(ac_fg).bg(ac_bg),
         ));
     }
 
@@ -1034,8 +1058,13 @@ fn draw_roflcopter_popup(f: &mut Frame, popup_style: Style, rect: Rect, frame_id
 /// tables for reference cards, lists for menus, and paragraphs for text
 /// prompts and messages.
 fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, rect: Rect) {
-    let popup_style = Style::new().bg(B_INV).fg(BG);
-    let bold_style = popup_style.add_modifier(Modifier::BOLD);
+    let (popup_style, bold_style) = if app.monochrome {
+        let s = Style::new().bg(F_HIGH).fg(F_INV);
+        (s, s.add_modifier(Modifier::BOLD))
+    } else {
+        let s = Style::new().bg(B_INV).fg(BG);
+        (s, s.add_modifier(Modifier::BOLD))
+    };
     f.render_widget(Clear, rect);
 
     match popup_type {
