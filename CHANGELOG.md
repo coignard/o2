@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.3
+
+### Added
+
+- MIDI input device selection; incoming 0xF8 clock pulses switch the engine to puppet mode, ticking every 6 pulses in sync with the external source instead of the internal timer; puppet mode exits after 2 s of inactivity
+- MIDI transport: incoming 0xFA (Start), 0xFB (Continue), and 0xFC (Stop) messages applied to the play/pause state
+- `inject` commander command (alias `in`) loads a `.o2` file from disk and writes its contents at the cursor position
+- `color` commander command (alias `cl`) overrides `B_MED` and `B_HIGH` via semicolon-separated hex RGB strings (e.g. `color:72dec2;eeeeee`)
+
+### Fixed
+
+- `?` character could not be typed; it was intercepted as a Controls popup shortcut
+- Guide overlay remained visible behind commander output when `inject` was run
+- `color` command incorrectly remapped operator and output port text foreground; only `B_MED` and `B_HIGH` are affected
+
 ## 0.2.2
 
 ### Added
