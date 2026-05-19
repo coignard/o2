@@ -606,7 +606,7 @@ fn op_midi_mono(ctx: &mut OpContext, g: char) {
                 if is_mono {
                     if let Some(existing) = &mut app.midi.mono_stack[channel] {
                         if existing.is_played {
-                            kill_notes.push([
+                            kill_notes.push(vec![
                                 MIDI_NOTE_OFF + existing.channel,
                                 existing.note_id,
                                 0,
@@ -621,7 +621,7 @@ fn op_midi_mono(ctx: &mut OpContext, g: char) {
                             && note.note == note_g
                         {
                             if note.is_played {
-                                kill_notes.push([MIDI_NOTE_OFF + note.channel, note.note_id, 0]);
+                                kill_notes.push(vec![MIDI_NOTE_OFF + note.channel, note.note_id, 0]);
                             }
                             false
                         } else {
@@ -649,7 +649,7 @@ fn op_midi_mono(ctx: &mut OpContext, g: char) {
                             skip_note_on = true;
                         } else {
                             if existing.is_played {
-                                kill_notes.push([
+                                kill_notes.push(vec![
                                     MIDI_NOTE_OFF + existing.channel,
                                     existing.note_id,
                                     0,
@@ -675,7 +675,7 @@ fn op_midi_mono(ctx: &mut OpContext, g: char) {
                                 true
                             } else {
                                 if note.is_played {
-                                    kill_notes.push([
+                                    kill_notes.push(vec![
                                         MIDI_NOTE_OFF + note.channel,
                                         note.note_id,
                                         0,
