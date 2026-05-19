@@ -241,9 +241,10 @@ fn run_app(
         let now = Instant::now();
         let mut timeout = next_frame_tick.saturating_duration_since(now);
 
-        // In puppet mode poll frequently so external ticks are processed promptly.
+        // In puppet mode cap the poll interval to a quarter-tick so the main
+        // thread processes puppet_tick within a fraction of one engine step.
         if app.midi.is_puppet() {
-            timeout = timeout.min(Duration::from_millis(10));
+            timeout = timeout.min(tick_rate / 4);
         }
 
         // Reduce timeout when the About popup is animating.
