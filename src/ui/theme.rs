@@ -105,7 +105,7 @@ impl StyleType {
     /// ```
     pub fn colors(self) -> (Option<Color>, Option<Color>) {
         match self {
-            Self::Operator => (Some(F_INV), Some(B_MED)),
+            Self::Operator => (Some(F_LOW), Some(B_MED)),
             Self::Haste => (Some(B_MED), None),
             Self::Input => (Some(B_HIGH), None),
             Self::Output => (Some(F_LOW), Some(B_HIGH)),
