@@ -258,6 +258,8 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                         app.write_silent(x + col, y + row, c);
                     }
                 }
+                app.cursor.cw = 0;
+                app.cursor.ch = 0;
                 app.history.record(&app.o2.cells);
                 app.update_ports();
             }
