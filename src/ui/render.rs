@@ -99,11 +99,7 @@ struct UiChar {
 /// Index 0 is `b_low` (stored but not applied — no rendered cell uses it),
 /// index 1 replaces [`B_MED`](crate::ui::theme::B_MED) (operator accent),
 /// index 2 replaces [`B_HIGH`](crate::ui::theme::B_HIGH) (output/input accent).
-fn apply_custom_colors(
-    fg: Color,
-    bg: Color,
-    custom: &[Option<(u8, u8, u8)>; 3],
-) -> (Color, Color) {
+fn apply_custom_colors(fg: Color, bg: Color, custom: &[Option<(u8, u8, u8)>; 3]) -> (Color, Color) {
     let remap = |c: Color| -> Color {
         if let Some((r, g, b)) = custom[1]
             && c == crate::ui::theme::B_MED

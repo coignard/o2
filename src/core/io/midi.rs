@@ -43,7 +43,7 @@ use std::{
     net::UdpSocket,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
         mpsc::{SyncSender, sync_channel},
     },
     thread::JoinHandle,

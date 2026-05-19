@@ -251,7 +251,10 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                 candidates.push(dir.join(base));
                 candidates.push(dir.join(&with_ext));
             }
-            if let Some(content) = candidates.iter().find_map(|p| std::fs::read_to_string(p).ok()) {
+            if let Some(content) = candidates
+                .iter()
+                .find_map(|p| std::fs::read_to_string(p).ok())
+            {
                 let x = app.cursor.cx;
                 let y = app.cursor.cy;
                 for (row, line) in content.lines().enumerate() {
