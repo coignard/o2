@@ -496,7 +496,10 @@ fn handle_popup_key(
                 }
                 11 => spawn_popups.push(PopupType::ClockMenu { selected: 0 }),
                 13 => spawn_popups.push(PopupType::Controls),
-                14 => spawn_popups.push(PopupType::Operators),
+                14 => {
+                    app.guide = !app.guide;
+                    close_popup = true;
+                }
                 15 => spawn_popups.push(PopupType::About {
                     opened_at: std::time::Instant::now(),
                 }),
@@ -818,6 +821,7 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
 
     match key.code {
         KeyCode::Esc => {
+            app.guide = false;
             app.select(app.cursor.cx as isize, app.cursor.cy as isize, 0, 0);
             app.mode = InputMode::Normal;
         }
@@ -923,7 +927,7 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
         }
 
         KeyCode::Char('g') | KeyCode::Char('G') if ctrl => {
-            app.popup.push(PopupType::Operators);
+            app.guide = !app.guide;
         }
 
         KeyCode::Up => {
