@@ -147,6 +147,9 @@ pub struct EditorState {
     /// other UI elements (menus, editing, status bar) retain their colours.
     pub contrast: bool,
 
+    /// When `true`, the operator reference guide is drawn over the grid.
+    pub guide: bool,
+
     /// ROFL BUFFER!!!
     pub rofl_buffer: String,
 }
@@ -177,7 +180,7 @@ impl EditorState {
             scroll_y: 0,
             cursor: CursorState::new(),
             mode: InputMode::Normal,
-            paused: true,
+            paused: false,
             running: true,
             commander: CommanderState::new(),
             bpm: 120,
@@ -191,6 +194,7 @@ impl EditorState {
             popup: Vec::new(),
             monochrome: false,
             contrast: false,
+            guide: true,
             rofl_buffer: String::with_capacity(4),
         };
         app.cursor.calc_bounds();
