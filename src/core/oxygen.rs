@@ -152,8 +152,8 @@ pub struct EditorState {
 
     /// Custom RGB colour overrides set by the `color:` command.
     ///
-    /// Indices: `[0]` = F_LOW (default glyphs / dots), `[1]` = B_MED (operator accent),
-    /// `[2]` = B_INV (selection / reader highlight).
+    /// Indices: `[0]` = F_LOW (b_low — default glyphs), `[1]` = B_MED (b_med — operator accent),
+    /// `[2]` = B_HIGH (b_high — input / output ports).
     /// `None` means "use the theme default".
     pub custom_colors: [Option<(u8, u8, u8)>; 3],
 

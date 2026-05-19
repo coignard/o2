@@ -114,7 +114,7 @@ fn apply_custom_colors(
         {
             Color::Rgb(r, g, b)
         } else if let Some((r, g, b)) = custom[2]
-            && c == crate::ui::theme::B_INV
+            && c == crate::ui::theme::B_HIGH
         {
             Color::Rgb(r, g, b)
         } else {

@@ -243,8 +243,14 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
         "paste" | "pa" => app.paste(),
         "erase" | "er" => app.erase(),
         "inject" | "in" => {
-            let path = std::path::Path::new(value);
-            if let Ok(content) = std::fs::read_to_string(path) {
+            let base = std::path::Path::new(value);
+            let with_ext = base.with_extension("o2");
+            let mut candidates = vec![base.to_path_buf(), with_ext.clone()];
+            if let Some(dir) = app.current_file.as_deref().and_then(|p| p.parent()) {
+                candidates.push(dir.join(base));
+                candidates.push(dir.join(&with_ext));
+            }
+            if let Some(content) = candidates.iter().find_map(|p| std::fs::read_to_string(p).ok()) {
                 let x = app.cursor.cx;
                 let y = app.cursor.cy;
                 for (row, line) in content.lines().enumerate() {
