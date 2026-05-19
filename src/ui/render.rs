@@ -721,7 +721,6 @@ fn draw_controls_popup(f: &mut Frame, popup_style: Style, bold_style: Style, rec
         ("Escape", "Normal Mode/Deselect"),
         ("( ) - + [ ] { }", "Adjust Grid Size and Rulers"),
         ("< and >", "Adjust BPM"),
-        ("?", "Controls (this message)"),
     ];
 
     let rows: Vec<Row> = controls

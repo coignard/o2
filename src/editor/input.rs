@@ -1065,9 +1065,6 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
                 app.move_cursor(-1, 0);
             }
         }
-        KeyCode::Char('?') if !ctrl && !alt => {
-            app.popup.push(PopupType::Controls);
-        }
         KeyCode::Char(c) if !ctrl && !alt && EditorState::is_allowed(c) => {
             app.write_cursor(c);
 
