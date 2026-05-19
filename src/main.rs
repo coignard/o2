@@ -202,6 +202,26 @@ fn run_app(
         // Sync BPM / paused / bclock to the clock thread on every iteration.
         app.midi.set_shared(app.bpm, app.paused, app.midi_bclock);
 
+        // Handle MIDI transport messages received from the input device.
+        match app.midi.poll_transport_event() {
+            0xFA => {
+                app.paused = false;
+                app.o2.f = 0;
+                needs_draw = true;
+            }
+            0xFB => {
+                app.paused = false;
+                needs_draw = true;
+            }
+            0xFC => {
+                app.paused = true;
+                app.midi.silence();
+                app.midi.send_clock_stop();
+                needs_draw = true;
+            }
+            _ => {}
+        }
+
         if needs_draw {
             let size = terminal.size()?;
             let viewport_w = size.width as usize;
@@ -220,6 +240,11 @@ fn run_app(
 
         let now = Instant::now();
         let mut timeout = next_frame_tick.saturating_duration_since(now);
+
+        // In puppet mode poll frequently so external ticks are processed promptly.
+        if app.midi.is_puppet() {
+            timeout = timeout.min(Duration::from_millis(10));
+        }
 
         // Reduce timeout when the About popup is animating.
         if app
@@ -256,19 +281,24 @@ fn run_app(
         }
 
         let now = Instant::now();
-        if now >= next_frame_tick {
+        let puppet_tick = app.midi.poll_puppet_tick();
+        let timer_tick = !app.midi.is_puppet() && now >= next_frame_tick;
+
+        if puppet_tick || timer_tick {
             if !app.paused {
                 app.operate();
                 app.midi.flush();
                 app.o2.f += 1;
                 needs_draw = true;
             }
-            next_frame_tick += tick_rate;
+            if timer_tick {
+                next_frame_tick += tick_rate;
 
-            // Ant mill: reset if we fall more than two frames behind.
-            let now = Instant::now();
-            if now.duration_since(next_frame_tick) > tick_rate * 2 {
-                next_frame_tick = now + tick_rate;
+                // Ant mill: reset if we fall more than two frames behind.
+                let now = Instant::now();
+                if now.duration_since(next_frame_tick) > tick_rate * 2 {
+                    next_frame_tick = now + tick_rate;
+                }
             }
         }
 

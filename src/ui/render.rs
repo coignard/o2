@@ -94,6 +94,36 @@ struct UiChar {
     bg: Color,
 }
 
+/// Applies `custom_colors` overrides to an already-resolved `(fg, bg)` pair.
+///
+/// Index 0 replaces [`F_LOW`](crate::ui::theme::F_LOW) (default glyphs),
+/// index 1 replaces [`B_MED`](crate::ui::theme::B_MED) (operator accent),
+/// index 2 replaces [`B_INV`](crate::ui::theme::B_INV) (selection highlight).
+fn apply_custom_colors(
+    fg: Color,
+    bg: Color,
+    custom: &[Option<(u8, u8, u8)>; 3],
+) -> (Color, Color) {
+    let remap = |c: Color| -> Color {
+        if let Some((r, g, b)) = custom[0]
+            && c == crate::ui::theme::F_LOW
+        {
+            Color::Rgb(r, g, b)
+        } else if let Some((r, g, b)) = custom[1]
+            && c == crate::ui::theme::B_MED
+        {
+            Color::Rgb(r, g, b)
+        } else if let Some((r, g, b)) = custom[2]
+            && c == crate::ui::theme::B_INV
+        {
+            Color::Rgb(r, g, b)
+        } else {
+            c
+        }
+    };
+    (remap(fg), remap(bg))
+}
+
 fn resolve_colors(style: StyleType, monochrome: bool, contrast: bool) -> (Color, Color) {
     let (fg, bg) = style.colors();
     if monochrome {
@@ -165,6 +195,7 @@ fn draw_grid(f: &mut Frame, app: &EditorState, area: Rect) {
 
                 let theme_type = make_style(app, x, y, display_glyph, selection_glyph);
                 let (fg, bg) = resolve_colors(theme_type, app.monochrome, app.contrast);
+                let (fg, bg) = apply_custom_colors(fg, bg, &app.custom_colors);
                 let s = Style::new().fg(fg).bg(bg);
 
                 (display_glyph, s)

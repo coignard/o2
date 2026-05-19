@@ -34,6 +34,18 @@ fn parse_command(cmd: &str) -> (String, String) {
     (command, value)
 }
 
+/// Parses a 6-character hex color string (with or without leading `#`) into `(r, g, b)`.
+fn parse_hex_color(s: &str) -> Option<(u8, u8, u8)> {
+    let s = s.trim_start_matches('#');
+    if s.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+    Some((r, g, b))
+}
+
 /// Parses and executes a commander command string.
 ///
 /// # Command format
@@ -66,6 +78,8 @@ fn parse_command(cmd: &str) -> (String, String) {
 /// | `copy`   | `co`  | Copy selection to clipboard    |
 /// | `paste`  | `pa`  | Paste from clipboard           |
 /// | `erase`  | `er`  | Erase selection                |
+/// | `inject` | `in`  | Paste a `.o2` file at cursor   |
+/// | `color`  | `cl`  | Set custom RGB colours         |
 ///
 /// # Parameters
 ///
@@ -228,6 +242,28 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
         "copy" | "co" => app.copy(),
         "paste" | "pa" => app.paste(),
         "erase" | "er" => app.erase(),
+        "inject" | "in" => {
+            let path = std::path::Path::new(value);
+            if let Ok(content) = std::fs::read_to_string(path) {
+                let x = app.cursor.cx;
+                let y = app.cursor.cy;
+                for (row, line) in content.lines().enumerate() {
+                    for (col, c) in line.chars().enumerate() {
+                        app.write_silent(x + col, y + row, c);
+                    }
+                }
+                app.history.record(&app.o2.cells);
+                app.update_ports();
+            }
+        }
+        "color" | "cl" => {
+            let parts: Vec<&str> = value.split(';').collect();
+            for (i, part) in parts.iter().enumerate().take(3) {
+                if !part.is_empty() {
+                    app.custom_colors[i] = parse_hex_color(part);
+                }
+            }
+        }
         _ => {}
     }
 }

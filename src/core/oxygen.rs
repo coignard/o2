@@ -150,6 +150,13 @@ pub struct EditorState {
     /// When `true`, the operator reference guide is drawn over the grid.
     pub guide: bool,
 
+    /// Custom RGB colour overrides set by the `color:` command.
+    ///
+    /// Indices: `[0]` = F_LOW (default glyphs / dots), `[1]` = B_MED (operator accent),
+    /// `[2]` = B_INV (selection / reader highlight).
+    /// `None` means "use the theme default".
+    pub custom_colors: [Option<(u8, u8, u8)>; 3],
+
     /// ROFL BUFFER!!!
     pub rofl_buffer: String,
 }
@@ -195,6 +202,7 @@ impl EditorState {
             monochrome: false,
             contrast: false,
             guide: true,
+            custom_colors: [None, None, None],
             rofl_buffer: String::with_capacity(4),
         };
         app.cursor.calc_bounds();

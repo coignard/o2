@@ -38,12 +38,12 @@
 use crate::core::io::clock::MidiClock;
 use crate::core::io::osc::Osc;
 use crate::core::io::udp::Udp;
-use midir::{MidiInput, MidiOutput};
+use midir::{MidiInput, MidiInputConnection, MidiOutput};
 use std::{
     net::UdpSocket,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
         mpsc::{SyncSender, sync_channel},
     },
     thread::JoinHandle,
@@ -207,8 +207,18 @@ pub struct MidiState {
     frame_tx: SyncSender<MidiFrame>,
     /// Sends control commands to the clock thread.
     cmd_tx: SyncSender<MidiCommand>,
+    /// Sends incoming MIDI bytes from the input callback to the clock thread.
+    in_tx: SyncSender<u8>,
+    /// Active MIDI input connection; dropping it disconnects the device.
+    _input_conn: Option<MidiInputConnection<()>>,
     /// Shared atomic carrying live BPM, paused, bclock, and stop flags.
     shared: Arc<AtomicU64>,
+    /// Set by the clock thread every 6 incoming 0xF8 pulses (one engine tick).
+    puppet_tick: Arc<AtomicBool>,
+    /// Carries the latest incoming transport byte (0xFA/0xFB/0xFC) for the main thread.
+    transport_event: Arc<AtomicU8>,
+    /// True while an external MIDI clock is driving the engine.
+    is_puppet: Arc<AtomicBool>,
     /// Join handle for the clock thread; taken on drop.
     _thread_handle: Option<JoinHandle<()>>,
 }
@@ -237,8 +247,20 @@ impl MidiState {
         let shared = Arc::new(AtomicU64::new(pack(120, true, false, false)));
         let (frame_tx, frame_rx) = sync_channel::<MidiFrame>(2);
         let (cmd_tx, cmd_rx) = sync_channel::<MidiCommand>(16);
+        let (in_tx, in_rx) = sync_channel::<u8>(64);
+        let puppet_tick = Arc::new(AtomicBool::new(false));
+        let transport_event = Arc::new(AtomicU8::new(0));
+        let is_puppet = Arc::new(AtomicBool::new(false));
 
-        let clock = MidiClock::new(udp_socket, DEFAULT_OSC_PORT, DEFAULT_UDP_PORT);
+        let clock = MidiClock::new(
+            udp_socket,
+            DEFAULT_OSC_PORT,
+            DEFAULT_UDP_PORT,
+            in_rx,
+            Arc::clone(&puppet_tick),
+            Arc::clone(&transport_event),
+            Arc::clone(&is_puppet),
+        );
         let shared_clone = Arc::clone(&shared);
         let handle = std::thread::Builder::new()
             .name("midi-clock".into())
@@ -261,7 +283,12 @@ impl MidiState {
             pending: Vec::new(),
             frame_tx,
             cmd_tx,
+            in_tx,
+            _input_conn: None,
             shared,
+            puppet_tick,
+            transport_event,
+            is_puppet,
             _thread_handle: handle,
         };
         state.select_next_output();
@@ -303,21 +330,82 @@ impl MidiState {
     }
 
     /// Advances [`input_index`](MidiState::input_index) to the next available
-    /// input device (display only; o2 does not process inbound MIDI).
+    /// input device and opens a live MIDI input connection to it.
+    ///
+    /// Cycles through: no device (−1) → device 0 → device 1 → … → last → no device.
+    /// Incoming bytes are forwarded to the clock thread, which handles
+    /// 0xF8 (Beat Clock), 0xFA (Start), 0xFB (Continue), and 0xFC (Stop).
     pub fn select_next_input(&mut self) {
-        if let Ok(midi) = MidiInput::new("o2") {
-            let ports = midi.ports();
-            if ports.is_empty() {
+        // Always drop the previous connection before opening a new one.
+        self._input_conn = None;
+
+        let Ok(midi) = MidiInput::new("o2") else {
+            return;
+        };
+        let ports = midi.ports();
+
+        if ports.is_empty() {
+            self.input_index = -1;
+            self.input_device_name = String::from("No Input Device");
+            return;
+        }
+
+        // Cycle: -1 → 0 → 1 → … → N-1 → -1 → …
+        let next = if self.input_index >= ports.len() as i32 - 1 {
+            -1
+        } else {
+            self.input_index + 1
+        };
+
+        if next < 0 {
+            self.input_index = -1;
+            self.input_device_name = String::from("No Input Device");
+            return;
+        }
+
+        let port = &ports[next as usize];
+        let name = midi
+            .port_name(port)
+            .unwrap_or_else(|_| String::from("Unknown Device"));
+        let tx = self.in_tx.clone();
+
+        match midi.connect(
+            port,
+            "o2-input",
+            move |_, data, _| {
+                if let Some(&byte) = data.first() {
+                    let _ = tx.try_send(byte);
+                }
+            },
+            (),
+        ) {
+            Ok(conn) => {
+                self.input_index = next;
+                self.input_device_name = name;
+                self._input_conn = Some(conn);
+            }
+            Err(_) => {
                 self.input_index = -1;
                 self.input_device_name = String::from("No Input Device");
-                return;
             }
-            self.input_index = (self.input_index + 1) % ports.len() as i32;
-            let port = &ports[self.input_index as usize];
-            self.input_device_name = midi
-                .port_name(port)
-                .unwrap_or_else(|_| String::from("Unknown Device"));
         }
+    }
+
+    /// Returns `true` while an external MIDI clock is driving the engine.
+    pub fn is_puppet(&self) -> bool {
+        self.is_puppet.load(Ordering::Relaxed)
+    }
+
+    /// Checks for an engine-tick signal from the external clock and clears it.
+    /// Returns `true` if the clock thread counted a full 6-pulse tick.
+    pub fn poll_puppet_tick(&self) -> bool {
+        self.puppet_tick.swap(false, Ordering::Relaxed)
+    }
+
+    /// Returns any pending MIDI transport byte (0xFA Start, 0xFB Continue,
+    /// 0xFC Stop) received from the input device and clears it. Returns 0 if none.
+    pub fn poll_transport_event(&self) -> u8 {
+        self.transport_event.swap(0, Ordering::Relaxed)
     }
 
     /// Queues a raw MIDI message for inclusion in the next [`MidiFrame`].
