@@ -70,16 +70,6 @@ cargo test
 
 O₂ is a Rust port of the [ORCΛ](https://github.com/hundredrabbits/Orca) esoteric programming language and livecoding environment, combining the best of the original JS and C implementations by [Hundred Rabbits](https://github.com/hundredrabbits) (Devine Lu Linvega & Rek Bell).
 
-## Sponsors
-
-<a href="https://cloud9.sh/">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/cloud9-hq/assets/blob/main/logos/logo-dark.svg?raw=true">
-    <source media="(prefers-color-scheme: light)" srcset="https://github.com/cloud9-hq/assets/blob/main/logos/logo.svg?raw=true">
-    <img src="https://github.com/cloud9-hq/assets/blob/main/logos/logo.svg?raw=true" alt="Cloud9 Logo" height="38">
-  </picture>
-</a>
-
 ## License
 
 The O₂ source code is © 2026 René Coignard and licensed under the [GNU General Public License v3.0 or later](LICENSE).
