@@ -856,21 +856,7 @@ impl EditorState {
 
     /// Connects to the MIDI output device at `index` in the device list.
     pub fn set_midi_device(&mut self, index: usize) {
-        if let Ok(midi) = midir::MidiOutput::new("o2") {
-            let ports = midi.ports();
-            if index < ports.len() {
-                let port = &ports[index];
-                if let Ok(name) = midi.port_name(port) {
-                    self.midi.device_name = name;
-                    self.midi.output_index = index as i32;
-                    self.midi.out = midi.connect(port, "o2-output").ok();
-                }
-            } else {
-                self.midi.output_index = -1;
-                self.midi.device_name = String::from("No Output Device");
-                self.midi.out = None;
-            }
-        }
+        self.midi.select_output_by_index(index as i32);
     }
 }
 

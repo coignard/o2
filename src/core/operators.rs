@@ -621,7 +621,11 @@ fn op_midi_mono(ctx: &mut OpContext, g: char) {
                             && note.note == note_g
                         {
                             if note.is_played {
-                                kill_notes.push(vec![MIDI_NOTE_OFF + note.channel, note.note_id, 0]);
+                                kill_notes.push(vec![
+                                    MIDI_NOTE_OFF + note.channel,
+                                    note.note_id,
+                                    0,
+                                ]);
                             }
                             false
                         } else {

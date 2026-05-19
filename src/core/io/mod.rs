@@ -15,7 +15,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-/// MIDI output, note stacks, CC/PB messages, OSC, and UDP.
+/// Dedicated MIDI clock thread: phase-locked Beat Clock and note dispatch.
+pub(crate) mod clock;
+
+/// MIDI output facade, note stacks, CC/PB messages, OSC, and UDP.
 pub mod midi;
 
 /// OSC output: packet encoding and per-tick dispatch.

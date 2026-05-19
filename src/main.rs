@@ -18,10 +18,10 @@
 //! Entry point and main event loop.
 //!
 //! [`main`] initialises the crossterm raw-mode terminal, creates an [`EditorState`],
-//! and drives the event loop. The loop uses a phase-locked approach to clock
-//! timing: a `next_clock_tick` instant is advanced by a fixed `clock_rate`
-//! each iteration, eliminating timer drift that would otherwise cause rhythmic
-//! jitter in MIDI output.
+//! and drives the event loop. MIDI Beat Clock timing and note dispatch are
+//! handled entirely by the dedicated `midi-clock` thread (see
+//! [`o2_rs::core::io::clock`]); the main loop only drives the engine at the
+//! correct frame rate and renders the UI.
 
 use anyhow::Result;
 use clap::Parser;
@@ -122,11 +122,6 @@ struct Cli {
     )]
     version: Option<bool>,
 
-    /// Reduce the timing jitter of outgoing MIDI and OSC messages.
-    /// Uses more CPU time.
-    #[arg(long, help_heading = "OSC/MIDI options", verbatim_doc_comment)]
-    strict_timing: bool,
-
     /// Set MIDI to be sent via OSC formatted for Plogue Bidule.
     /// The path argument is the path of the Plogue OSC MIDI device.
     /// Example: /OSC_MIDI_0/MIDI
@@ -198,13 +193,15 @@ fn emergency_save(app: &EditorState) {
 fn run_app(
     app: &mut EditorState,
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    cli: &Cli,
+    _cli: &Cli,
 ) -> Result<()> {
-    let mut next_clock_tick = Instant::now();
-    let mut clock_counter = 0;
+    let mut next_frame_tick = Instant::now();
     let mut needs_draw = true;
 
     loop {
+        // Sync BPM / paused / bclock to the clock thread on every iteration.
+        app.midi.set_shared(app.bpm, app.paused, app.midi_bclock);
+
         if needs_draw {
             let size = terminal.size()?;
             let viewport_w = size.width as usize;
@@ -221,19 +218,20 @@ fn run_app(
             60000 / app.bpm.max(1) as u64 / 4
         });
 
-        let clock_rate = tick_rate / 6;
+        let now = Instant::now();
+        let mut timeout = next_frame_tick.saturating_duration_since(now);
 
-        let mut now = Instant::now();
-        let mut timeout = next_clock_tick.saturating_duration_since(now);
-
-        if cli.strict_timing && timeout > Duration::from_millis(2) {
-            timeout -= Duration::from_millis(2);
-        } else if cli.strict_timing {
-            timeout = Duration::from_millis(0);
+        // Reduce timeout when the About popup is animating.
+        if app
+            .popup
+            .iter()
+            .any(|p| matches!(p, PopupType::About { .. }))
+        {
+            timeout = timeout.min(Duration::from_millis(50));
+            needs_draw = true;
         }
 
-        let has_event = event::poll(timeout)?;
-        if has_event {
+        if event::poll(timeout)? {
             match event::read()? {
                 Event::Resize(cols, rows) => {
                     let new_w = (cols as usize).max(app.o2.w);
@@ -257,42 +255,21 @@ fn run_app(
             }
         }
 
-        now = Instant::now();
-
-        if !has_event && cli.strict_timing {
-            while now < next_clock_tick {
-                std::hint::spin_loop();
-                now = Instant::now();
-            }
-        }
-
-        if now >= next_clock_tick {
-            if clock_counter == 0 && !app.paused {
+        let now = Instant::now();
+        if now >= next_frame_tick {
+            if !app.paused {
                 app.operate();
-                app.midi.run();
+                app.midi.flush();
                 app.o2.f += 1;
                 needs_draw = true;
             }
+            next_frame_tick += tick_rate;
 
-            if app.midi_bclock && !app.paused {
-                app.midi.send_clock_pulse();
+            // Ant mill: reset if we fall more than two frames behind.
+            let now = Instant::now();
+            if now.duration_since(next_frame_tick) > tick_rate * 2 {
+                next_frame_tick = now + tick_rate;
             }
-
-            clock_counter = (clock_counter + 1) % 6;
-            next_clock_tick += clock_rate;
-
-            // ant mill
-            if now.duration_since(next_clock_tick) > clock_rate * 12 {
-                next_clock_tick = now + clock_rate;
-            }
-        }
-
-        if app
-            .popup
-            .iter()
-            .any(|p| matches!(p, PopupType::About { .. }))
-        {
-            needs_draw = true;
         }
 
         if !app.running {

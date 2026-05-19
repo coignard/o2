@@ -250,7 +250,15 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
     };
     let mono = app.monochrome;
     let contrast = app.contrast;
-    write_ui(&mut ui_l1, &inspect, 0, gw - 1, StyleType::Input, mono, contrast);
+    write_ui(
+        &mut ui_l1,
+        &inspect,
+        0,
+        gw - 1,
+        StyleType::Input,
+        mono,
+        contrast,
+    );
 
     let mode_char = match app.mode {
         InputMode::Normal => "",
@@ -323,7 +331,15 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             app.commander.query,
             if app.o2.f % 2 == 0 { "_" } else { "" }
         );
-        write_ui(&mut ui_l2, &cmd_str, 0, gw * 4, StyleType::Input, mono, contrast);
+        write_ui(
+            &mut ui_l2,
+            &cmd_str,
+            0,
+            gw * 4,
+            StyleType::Input,
+            mono,
+            contrast,
+        );
     } else {
         write_ui(
             &mut ui_l2,
@@ -377,7 +393,15 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         } else {
             StyleType::Input
         };
-        write_ui(&mut ui_l2, &clock_str, gw * 3, gw, clock_style, mono, contrast);
+        write_ui(
+            &mut ui_l2,
+            &clock_str,
+            gw * 3,
+            gw,
+            clock_style,
+            mono,
+            contrast,
+        );
 
         let vars: String = app
             .o2
@@ -399,7 +423,15 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
                 d.push_str(&vars[..var_offset]);
                 d.chars().take(max).collect()
             };
-            write_ui(&mut ui_l2, &disp, gw * 4, max, StyleType::Input, mono, contrast);
+            write_ui(
+                &mut ui_l2,
+                &disp,
+                gw * 4,
+                max,
+                StyleType::Input,
+                mono,
+                contrast,
+            );
         }
 
         let io_out_msg = if app.o2.f < 250 {
@@ -473,7 +505,7 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
             const COL_INNER_W: u16 = 35;
             let avail_rows = area.height.saturating_sub(2).max(1);
             let rows_per_col = N_OPS.min(avail_rows);
-            let num_cols = (N_OPS + rows_per_col - 1) / rows_per_col;
+            let num_cols = N_OPS.div_ceil(rows_per_col);
             (num_cols * COL_INNER_W + 2, rows_per_col + 2)
         }
         PopupType::About { .. } => (47, 13),
@@ -734,7 +766,7 @@ fn draw_operators_popup(f: &mut Frame, popup_style: Style, bold_style: Style, re
 
     let n = operators.len();
     let rows_per_col = inner.height as usize;
-    let num_cols = ((n + rows_per_col - 1) / rows_per_col).max(1);
+    let num_cols = n.div_ceil(rows_per_col).max(1);
     let col_w = inner.width / num_cols as u16;
 
     for col in 0..num_cols {
