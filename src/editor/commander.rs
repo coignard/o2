@@ -86,6 +86,7 @@ fn parse_hex_color(s: &str) -> Option<(u8, u8, u8)> {
 /// * `origin` -- optional grid position used as the write target for `write`
 ///   and `time` commands when no explicit coordinates are given.
 pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usize)>) {
+    app.guide = false;
     let (command, value) = parse_command(cmd);
     let value = value.as_str();
 
