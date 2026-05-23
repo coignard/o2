@@ -559,8 +559,6 @@ fn op_midi_mono(ctx: &mut OpContext, g: char) {
     ctx.add_port(5, 0, false, Some("length"));
 
     ctx.execute_triggered(|app, x, y| {
-        app.set_port(x, y, None, None);
-
         let ch_g = app.listen(x, y, 1, 0);
         let oct_g = app.listen(x, y, 2, 0);
         let note_g = app.listen(x, y, 3, 0);
@@ -599,6 +597,7 @@ fn op_midi_mono(ctx: &mut OpContext, g: char) {
         };
 
         if let Some(note_id) = transpose(note_g, octave as i32) {
+            app.set_port(x, y, None, None);
             let is_mono = g == '%';
             let mut kill_notes = Vec::new();
 
