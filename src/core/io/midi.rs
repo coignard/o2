@@ -161,7 +161,7 @@ pub struct MidiPb {
 }
 
 /// A tagged union covering both CC and Pitch Bend outgoing messages.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MidiMessage {
     /// A Control Change message.
     Cc(MidiCc),
@@ -503,6 +503,12 @@ impl MidiState {
             osc_midi_bidule: self.osc_midi_bidule.clone(),
         };
         let _ = self.frame_tx.try_send(frame);
+    }
+
+    /// Discards any MIDI bytes accumulated by [`send_midi_msg`](MidiState::send_midi_msg)
+    /// during a preview tick so they are not forwarded to the clock thread.
+    pub(crate) fn discard_pending(&mut self) {
+        self.pending.clear();
     }
 
     /// Clears all local note/CC/OSC/UDP stacks and sends a

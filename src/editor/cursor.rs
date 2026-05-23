@@ -220,6 +220,9 @@ impl EditorState {
                     self.move_cursor(1, 0);
                 }
                 self.history.record(&self.o2.cells);
+                if !self.paused {
+                    self.preview_tick();
+                }
                 self.update_ports();
             }
         }

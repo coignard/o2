@@ -71,6 +71,9 @@ pub struct OxygenEngine {
     pub rng_state: u64,
     /// Reusable operator list populated each frame to avoid per-tick heap allocations.
     pub(crate) ops_cache: Vec<(usize, usize, char)>,
+    /// When `true`, movement operators (`move_op`) are no-ops.
+    /// Used by [`EditorState::preview_tick`] to write output glyphs without side-effects.
+    pub(crate) preview_mode: bool,
 }
 
 impl OxygenEngine {
@@ -87,6 +90,7 @@ impl OxygenEngine {
             f: 0,
             rng_state: seed,
             ops_cache: Vec::with_capacity(256),
+            preview_mode: false,
         }
     }
 }
@@ -563,6 +567,32 @@ impl EditorState {
         self.scan_and_run(true);
     }
 
+    /// Runs all operators once to write their output glyphs (e.g. `*` under D)
+    /// without sending MIDI or advancing the frame counter. Movement operators
+    /// are suppressed via [`preview_mode`](OxygenEngine::preview_mode). The
+    /// MIDI stacks are saved before and restored after, so no notes are queued.
+    /// Called after every grid write so the display reflects operator outputs
+    /// immediately rather than waiting for the next BPM tick.
+    pub fn preview_tick(&mut self) {
+        let saved_stack = self.midi.stack.clone();
+        let saved_mono = self.midi.mono_stack;
+        let saved_cc = self.midi.cc_stack.clone();
+        let saved_osc = self.midi.osc.stack.clone();
+        let saved_udp = self.midi.udp.stack.clone();
+
+        self.o2.locks.fill(false);
+        self.o2.preview_mode = true;
+        self.scan_and_run(false);
+        self.o2.preview_mode = false;
+
+        self.midi.stack = saved_stack;
+        self.midi.mono_stack = saved_mono;
+        self.midi.cc_stack = saved_cc;
+        self.midi.osc.stack = saved_osc;
+        self.midi.udp.stack = saved_udp;
+        self.midi.discard_pending();
+    }
+
     fn scan_and_run(&mut self, dry_run: bool) {
         let mut ops = std::mem::take(&mut self.o2.ops_cache);
         ops.clear();
@@ -725,6 +755,9 @@ impl EditorState {
 
     /// Moves operator glyph `g` from `(x, y)` one step in direction `(dx, dy)`.
     pub fn move_op(&mut self, x: usize, y: usize, dx: isize, dy: isize, g: char) {
+        if self.o2.preview_mode {
+            return;
+        }
         let px = x as isize + dx;
         let py = y as isize + dy;
 
