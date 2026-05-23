@@ -409,7 +409,9 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         };
         let clock_str = format!("{}{}{}", app.bpm, bpm_offset, beat);
 
-        let clock_style = if app.midi_bclock {
+        let clock_style = if app.midi.is_puppet() {
+            StyleType::Output
+        } else if app.midi_bclock {
             StyleType::Clock
         } else if app.paused {
             StyleType::Default
@@ -471,6 +473,12 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             mono,
             contrast,
         );
+    }
+
+    for uc in ui_l1.iter_mut().chain(ui_l2.iter_mut()) {
+        let (fg, bg) = apply_custom_colors(uc.fg, uc.bg, &app.custom_colors);
+        uc.fg = fg;
+        uc.bg = bg;
     }
 
     let status_lines = vec![spans_to_line(&ui_l1), spans_to_line(&ui_l2)];
