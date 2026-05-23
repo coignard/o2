@@ -31,7 +31,7 @@
 //! Cells may be *locked* by an operator to prevent other operators from
 //! overwriting them during the same frame.
 
-use arboard::Clipboard;
+use crate::editor::clipboard;
 use std::path::PathBuf;
 
 use crate::core::io::MidiState;
@@ -835,9 +835,7 @@ impl EditorState {
                 s.push('\n');
             }
         }
-        if let Ok(mut ctx) = Clipboard::new() {
-            let _ = ctx.set_text(s);
-        }
+        clipboard::copy(&s);
     }
 
     /// Copies the current selection to the clipboard and erases it.
@@ -848,9 +846,7 @@ impl EditorState {
 
     /// Pastes text from the system clipboard at the cursor position.
     pub fn paste(&mut self) {
-        if let Ok(mut ctx) = Clipboard::new()
-            && let Ok(text) = ctx.get_text()
-        {
+        if let Some(text) = clipboard::paste() {
             self.paste_text(&text);
         }
     }

@@ -34,6 +34,7 @@
 
 use crate::core::oxygen::EditorState;
 use crate::core::oxygen::{InputMode, PopupType, PromptPurpose};
+use crate::editor::clipboard;
 use crate::editor::commander::{preview_command, run_command};
 use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
 use crossterm::event::{
@@ -799,8 +800,7 @@ fn handle_commander_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, alt: b
                 preview_command(app);
             } else if ctrl
                 && (c == 'v' || c == 'V')
-                && let Ok(mut ctx) = arboard::Clipboard::new()
-                && let Ok(text) = ctx.get_text()
+                && let Some(text) = clipboard::paste()
             {
                 handle_paste(app, &text);
             }
