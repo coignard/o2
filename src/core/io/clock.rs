@@ -129,16 +129,26 @@ impl MidiClock {
         let mut puppet = false;
         let mut puppet_pulse: u8 = 0;
         let mut last_pulse = Instant::now();
+        let mut current_bpm = 120;
 
         loop {
-            let (bpm, paused, bclock, stop) =
-                crate::core::io::midi::unpack(shared.load(Ordering::Relaxed));
+            let packed = shared.load(Ordering::Relaxed);
+            let (bpm, paused, bclock, stop) = crate::core::io::midi::unpack(packed);
 
             if stop {
                 break;
             }
 
-            // Drain incoming MIDI bytes from the selected input device.
+            if bpm != current_bpm {
+                let new_tick_rate = Duration::from_nanos(60_000_000_000_u64 / (bpm.max(1) as u64) / 4);
+                let new_clock_rate = new_tick_rate / 6;
+                let now = Instant::now();
+                if next_tick > now + new_clock_rate {
+                    next_tick = now + new_clock_rate;
+                }
+                current_bpm = bpm;
+            }
+
             while let Ok(byte) = self.in_rx.try_recv() {
                 match byte {
                     MIDI_CLOCK_PULSE => {
@@ -162,7 +172,6 @@ impl MidiClock {
                 }
             }
 
-            // Abandon puppet mode after 2 s without an incoming pulse.
             if puppet && last_pulse.elapsed() > PUPPET_TIMEOUT {
                 puppet = false;
                 self.is_puppet_shared.store(false, Ordering::Relaxed);
@@ -171,7 +180,6 @@ impl MidiClock {
             }
 
             if puppet {
-                // Keep draining commands (Silence, SelectOutput, etc.) while slaved.
                 while let Ok(cmd) = cmd_rx.try_recv() {
                     self.exec_cmd(cmd, &frame_rx);
                 }
@@ -179,19 +187,23 @@ impl MidiClock {
                 continue;
             }
 
-            let tick_rate = Duration::from_nanos(60_000_000_000_u64 / (bpm.max(1) as u64) / 4);
+            let tick_rate = Duration::from_nanos(60_000_000_000_u64 / (current_bpm.max(1) as u64) / 4);
             let clock_rate = tick_rate / 6;
 
-            // Sleep until SPIN_LEAD before the target tick.
-            let remaining = next_tick.saturating_duration_since(Instant::now());
-            if remaining > SPIN_LEAD {
-                std::thread::sleep(remaining - SPIN_LEAD);
+            let now = Instant::now();
+            if next_tick > now + SPIN_LEAD {
+                let sleep_dur = (next_tick - now) - SPIN_LEAD;
+                let chunk = sleep_dur.min(Duration::from_millis(15));
+                if let Ok(cmd) = cmd_rx.recv_timeout(chunk) {
+                    self.exec_cmd(cmd, &frame_rx);
+                }
+                continue;
             }
 
-            // After waking: drain commands and frames before the spin window.
             while let Ok(cmd) = cmd_rx.try_recv() {
                 self.exec_cmd(cmd, &frame_rx);
             }
+
             if !paused
                 && clock_counter == 0
                 && let Ok(frame) = frame_rx.try_recv()
