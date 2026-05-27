@@ -22,16 +22,19 @@ use std::process::{Command, Stdio};
 
 /// Copies `text` to the system clipboard.
 pub fn copy(text: &str) {
-    if arboard::Clipboard::new()
-        .and_then(|mut ctx| ctx.set_text(text))
-        .is_err()
+    #[cfg(target_os = "linux")]
     {
-        #[cfg(target_os = "linux")]
+        if pipe_to("wl-copy", &[], text)
+            || pipe_to("xclip", &["-selection", "clipboard"], text)
+            || pipe_to("xsel", &["--clipboard", "--input"], text)
         {
-            let _ = pipe_to("wl-copy", &[], text)
-                || pipe_to("xclip", &["-selection", "clipboard"], text)
-                || pipe_to("xsel", &["--clipboard", "--input"], text);
+            return;
         }
+        let _ = arboard::Clipboard::new().and_then(|mut ctx| ctx.set_text(text));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = arboard::Clipboard::new().and_then(|mut ctx| ctx.set_text(text));
     }
 }
 
@@ -61,13 +64,15 @@ fn pipe_to(cmd: &str, args: &[&str], text: &str) -> bool {
     else {
         return false;
     };
-    let wrote = child
+
+    let write_ok = child
         .stdin
         .take()
-        .and_then(|mut s| s.write_all(text.as_bytes()).ok())
-        .is_some();
-    drop(child);
-    wrote
+        .map(|mut s| s.write_all(text.as_bytes()).is_ok())
+        .unwrap_or(false);
+
+    let _ = child.wait();
+    write_ok
 }
 
 #[cfg(target_os = "linux")]
