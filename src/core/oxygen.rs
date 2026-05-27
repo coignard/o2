@@ -1282,13 +1282,13 @@ mod tests {
     fn test_operate_clears_state() {
         let mut app = create_app(5, 5);
         app.o2.locks[0] = true;
-        app.o2.variables[97] = 'X';
+        app.o2.variables[97] = Some('X');
         app.o2.ports[0] = Some(StyleType::Input);
 
         app.operate();
 
         assert!(!app.o2.locks[0]);
-        assert_eq!(app.o2.variables[97], '.');
+        assert_eq!(app.o2.variables[97], None);
         assert_eq!(app.o2.ports[0], None);
     }
 
