@@ -56,7 +56,7 @@ cargo add o2-rs
 Or add the following line to your `Cargo.toml`:
 
 ```toml
-o2-rs = "0.2.4"
+o2-rs = "0.2.5"
 ```
 
 ## Extensions
