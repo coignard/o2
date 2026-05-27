@@ -274,11 +274,10 @@ fn run_app(
                     input::handle_mouse(app, mouse_event);
                     needs_draw = true;
                 }
-                Event::Key(key) => {
-                    if input::handle_key(app, key) {
+                Event::Key(key)
+                    if input::handle_key(app, key) => {
                         needs_draw = true;
                     }
-                }
                 Event::Paste(ref text) => {
                     input::handle_paste(app, text);
                     needs_draw = true;
