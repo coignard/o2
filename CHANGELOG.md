@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.6
+
+### Fixed
+
+- Clipboard copy on Linux now correctly uses `wl-copy`, `xclip`, or `xsel` as the primary backend; `arboard` is only consulted as a last-resort fallback on systems where none of the three subprocess tools are available. Previously `arboard::Clipboard::set_text()` returned `Ok` on Wayland and X11 even though the clipboard selection was immediately lost when the temporary `Clipboard` instance was dropped, which prevented the existing subprocess fallback from ever being reached and made `Ctrl+C` silently fail in every Linux terminal (#1)
+- `pipe_to()` now waits on the spawned clipboard child process to prevent zombie accumulation, and reports write success based on the actual `write_all()` result instead of treating any non-`None` return as success
+
 ## 0.2.5
 
 ### Changed
