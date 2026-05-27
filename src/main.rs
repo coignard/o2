@@ -206,16 +206,11 @@ fn run_app(
     _cli: &Cli,
 ) -> Result<()> {
     let mut next_frame_tick = Instant::now();
-    let mut next_draw_tick = Instant::now();
     let mut needs_draw = true;
 
-    const UI_FRAME: Duration = Duration::from_millis(33);
-
     loop {
-        // Sync BPM / paused / bclock to the clock thread on every iteration.
         app.midi.set_shared(app.bpm, app.paused, app.midi_bclock);
 
-        // Handle MIDI transport messages received from the input device.
         match app.midi.poll_transport_event() {
             0xFA => {
                 app.paused = false;
@@ -254,23 +249,12 @@ fn run_app(
         let now = Instant::now();
         let mut timeout = next_frame_tick.saturating_duration_since(now);
 
-        // Cap to the UI refresh rate so the display updates at ~30 fps
-        // independently of the engine tick rate.
-        timeout = timeout.min(next_draw_tick.saturating_duration_since(now));
-
-        // In puppet mode cap the poll interval to a quarter-tick so the main
-        // thread processes puppet_tick within a fraction of one engine step.
         if app.midi.is_puppet() {
             timeout = timeout.min(tick_rate / 4);
         }
 
-        // Reduce timeout when the About popup is animating.
-        if app
-            .popup
-            .iter()
-            .any(|p| matches!(p, PopupType::About { .. }))
-        {
-            timeout = timeout.min(Duration::from_millis(50));
+        if app.popup.iter().any(|p| matches!(p, PopupType::About { .. })) {
+            timeout = timeout.min(Duration::from_millis(33));
             needs_draw = true;
         }
 
@@ -287,8 +271,9 @@ fn run_app(
                     needs_draw = true;
                 }
                 Event::Key(key) => {
-                    input::handle_key(app, key);
-                    needs_draw = true;
+                    if input::handle_key(app, key) {
+                        needs_draw = true;
+                    }
                 }
                 Event::Paste(ref text) => {
                     input::handle_paste(app, text);
@@ -299,12 +284,6 @@ fn run_app(
         }
 
         let now = Instant::now();
-
-        if now >= next_draw_tick {
-            needs_draw = true;
-            next_draw_tick = now + UI_FRAME;
-        }
-
         let puppet_tick = app.midi.poll_puppet_tick();
         let timer_tick = !app.midi.is_puppet() && now >= next_frame_tick;
 
@@ -380,8 +359,6 @@ fn main() -> Result<()> {
         app.load(&content, Some(path.clone()));
         app.resize(term_w.max(app.o2.w), term_h.max(app.o2.h));
         app.history.saved_absolute_index = Some(app.history.offset + app.history.index);
-    } else {
-        app.update_ports();
     }
 
     let loop_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

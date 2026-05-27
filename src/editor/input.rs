@@ -269,10 +269,10 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                 let col_clamped = grid_x.min(app.o2.w.saturating_sub(1));
                 let row_clamped = grid_y.min(app.o2.h.saturating_sub(1));
                 app.select(
-                    col_clamped as isize,
-                    row_clamped as isize,
-                    sx as isize - col_clamped as isize,
-                    sy as isize - row_clamped as isize,
+                    sx as isize,
+                    sy as isize,
+                    col_clamped as isize - sx as isize,
+                    row_clamped as isize - sy as isize,
                 );
             }
         }
@@ -281,10 +281,10 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                 let col_clamped = grid_x.min(app.o2.w.saturating_sub(1));
                 let row_clamped = grid_y.min(app.o2.h.saturating_sub(1));
                 app.select(
-                    col_clamped as isize,
-                    row_clamped as isize,
-                    sx as isize - col_clamped as isize,
-                    sy as isize - row_clamped as isize,
+                    sx as isize,
+                    sy as isize,
+                    col_clamped as isize - sx as isize,
+                    row_clamped as isize - sy as isize,
                 );
             }
             app.mouse_from = None;
@@ -348,11 +348,10 @@ pub fn handle_paste(app: &mut EditorState, text: &str) {
 /// 3. Otherwise [`handle_main_key`] processes the key in the main editing
 ///    layer.
 ///
-/// Key repeat events (`KeyEventKind::Repeat`) are treated identically to
-/// presses.  Release events are ignored.
-pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
+/// Returns `true` if the screen needs to be redrawn immediately.
+pub fn handle_key(app: &mut EditorState, key: KeyEvent) -> bool {
     if key.kind != KeyEventKind::Press && key.kind != KeyEventKind::Repeat {
-        return;
+        return false;
     }
 
     app.last_input_was_mouse = false;
@@ -366,7 +365,7 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
             .iter()
             .any(|p| matches!(p, PopupType::ConfirmQuit { .. }));
         if already_confirming {
-            return;
+            return false;
         }
 
         if app.is_dirty() {
@@ -377,7 +376,7 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
         } else {
             app.running = false;
         }
-        return;
+        return true;
     }
 
     if let Some(mut popup) = app.popup.pop() {
@@ -391,7 +390,7 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
 
         app.popup.extend(spawn_popups);
 
-        return;
+        return true;
     }
 
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
@@ -399,8 +398,9 @@ pub fn handle_key(app: &mut EditorState, key: KeyEvent) {
 
     if app.commander.active {
         handle_commander_key(app, key, ctrl, alt);
+        true
     } else {
-        handle_main_key(app, key, ctrl, shift, alt);
+        handle_main_key(app, key, ctrl, shift, alt)
     }
 }
 
@@ -809,7 +809,7 @@ fn handle_commander_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, alt: b
     }
 }
 
-fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool, alt: bool) {
+fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool, alt: bool) -> bool {
     let leap_x = app.grid_w as isize;
     let leap_y = app.grid_h as isize;
 
@@ -818,6 +818,8 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
     if !is_char {
         app.rofl_buffer.clear();
     }
+
+    let mut needs_draw = true;
 
     match key.code {
         KeyCode::Esc => {
@@ -1087,10 +1089,13 @@ fn handle_main_key(app: &mut EditorState, key: KeyEvent, ctrl: bool, shift: bool
                 }
             } else {
                 app.rofl_buffer.clear();
+                needs_draw = app.paused;
             }
         }
         _ => {}
     }
+
+    needs_draw
 }
 
 /// Returns the shortest suffix needed to complete `input` to the first
