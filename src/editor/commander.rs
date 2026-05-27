@@ -180,7 +180,6 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                     }
                 }
                 app.history.record(&app.o2.cells);
-                app.update_ports();
             }
         }
         "time" | "ti" => {
@@ -204,7 +203,6 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                 }
             }
             app.history.record(&app.o2.cells);
-            app.update_ports();
         }
         "cc" => {
             if let Ok(v) = value.parse::<u8>() {
@@ -288,7 +286,6 @@ pub fn run_command(app: &mut EditorState, cmd: &str, origin: Option<(usize, usiz
                     app.cursor.cw = 0;
                     app.cursor.ch = 0;
                     app.history.record(&app.o2.cells);
-                    app.update_ports();
                 }
             }
         }

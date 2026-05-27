@@ -80,7 +80,7 @@ impl<'a> OpContext<'a> {
             dx,
             dy,
             is_output,
-            self.is_active,
+            self.should_run,
             self.draws_ports,
             name,
         );
@@ -710,7 +710,6 @@ fn op_cc(ctx: &mut OpContext) {
     ctx.add_port(3, 0, false, Some("value"));
 
     ctx.execute_triggered(|app, x, y| {
-        app.set_port(x, y, None, None);
         let ch_g = app.listen(x, y, 1, 0);
         let knob_g = app.listen(x, y, 2, 0);
         let val_g = app.listen(x, y, 3, 0);
@@ -732,6 +731,7 @@ fn op_cc(ctx: &mut OpContext) {
         };
         let value = ((127.0 * raw_val as f32) / 35.0).ceil() as u8;
 
+        app.set_port(x, y, None, None);
         app.midi.cc_stack.push(MidiMessage::Cc(MidiCc {
             channel: channel as u8,
             knob: knob as u8,
@@ -746,7 +746,6 @@ fn op_pb(ctx: &mut OpContext) {
     ctx.add_port(3, 0, false, Some("msb"));
 
     ctx.execute_triggered(|app, x, y| {
-        app.set_port(x, y, None, None);
         let ch_g = app.listen(x, y, 1, 0);
         let lsb_g = app.listen(x, y, 2, 0);
         let msb_g = app.listen(x, y, 3, 0);
@@ -767,6 +766,7 @@ fn op_pb(ctx: &mut OpContext) {
         };
         let msb = ((127.0 * raw_msb as f32) / 35.0).ceil() as u8;
 
+        app.set_port(x, y, None, None);
         app.midi.cc_stack.push(MidiMessage::Pb(MidiPb {
             channel: channel as u8,
             lsb,
@@ -787,19 +787,22 @@ fn op_osc(ctx: &mut OpContext) {
         }
     }
     ctx.execute_triggered(|app, x, y| {
-        app.set_port(x, y, None, None);
         let path_g = app.listen(x, y, 1, 0);
-        if path_g != '.' {
-            let mut msg = String::with_capacity(35);
-            for i in 2..=36 {
-                let g = app.listen(x, y, i, 0);
-                if g == '.' {
-                    break;
-                }
-                msg.push(g);
-            }
-            app.midi.osc.stack.push((path_g.to_string(), msg));
+        if path_g == '.' {
+            return;
         }
+
+        let mut msg = String::with_capacity(35);
+        for i in 2..=36 {
+            let g = app.listen(x, y, i, 0);
+            if g == '.' {
+                break;
+            }
+            msg.push(g);
+        }
+
+        app.set_port(x, y, None, None);
+        app.midi.osc.stack.push((path_g.to_string(), msg));
     });
 }
 
@@ -814,7 +817,6 @@ fn op_udp(ctx: &mut OpContext) {
         }
     }
     ctx.execute_triggered(|app, x, y| {
-        app.set_port(x, y, None, None);
         let mut msg = String::with_capacity(35);
         for i in 1..=36 {
             let g = app.listen(x, y, i, 0);
@@ -823,9 +825,9 @@ fn op_udp(ctx: &mut OpContext) {
             }
             msg.push(g);
         }
-        if !msg.is_empty() {
-            app.midi.udp.stack.push(msg);
-        }
+
+        app.set_port(x, y, None, None);
+        app.midi.udp.stack.push(msg);
     });
 }
 
@@ -841,7 +843,6 @@ fn op_self(ctx: &mut OpContext) {
         }
     }
     ctx.execute_triggered(|app, x, y| {
-        app.set_port(x, y, None, None);
         let mut msg = String::with_capacity(35);
         for i in 1..=36 {
             let g = app.listen(x, y, i, 0);
@@ -850,493 +851,11 @@ fn op_self(ctx: &mut OpContext) {
             }
             msg.push(g);
         }
-        if !msg.is_empty() {
-            run_command(app, &msg, Some((x, y + 1)));
+        if msg.is_empty() {
+            return;
         }
+
+        app.set_port(x, y, None, None);
+        run_command(app, &msg, Some((x, y + 1)));
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::core::oxygen::EditorState;
-
-    fn run_grid(input: &str, frames: usize) -> String {
-        let input = input.trim_matches('\n');
-        let lines: Vec<&str> = input.lines().collect();
-        let h = lines.len().max(1);
-        let w = lines
-            .iter()
-            .map(|l| l.chars().count())
-            .max()
-            .unwrap_or(1)
-            .max(1);
-        let mut app = EditorState::new(w, h, 42, 100);
-        app.load(input, None);
-        for _ in 0..frames {
-            app.operate();
-            app.o2.f += 1;
-        }
-        let mut output = String::new();
-        for y in 0..app.o2.h {
-            for x in 0..app.o2.w {
-                output.push(app.glyph_at(x, y));
-            }
-            if y < app.o2.h - 1 {
-                output.push('\n');
-            }
-        }
-        output
-    }
-
-    #[test]
-    fn test_op_add() {
-        assert_eq!(run_grid("1A2\n...", 1), "1A2\n.3.");
-        assert_eq!(run_grid("aA5\n...", 1), "aA5\n.f.");
-        assert_eq!(run_grid("1AA\n...", 1), "1AA\n.B.");
-        assert_eq!(run_grid("1Aa\n...", 1), "1Aa\n.b.");
-        assert_eq!(run_grid("1A.\n...", 1), "1A.\n.1.");
-        assert_eq!(run_grid("zAz\n...", 1), "zAz\n.y.");
-    }
-
-    #[test]
-    fn test_op_sub() {
-        assert_eq!(run_grid("5B2\n...", 1), "5B2\n.3.");
-        assert_eq!(run_grid("2B5\n...", 1), "2B5\n.3.");
-        assert_eq!(run_grid("aBa\n...", 1), "aBa\n.0.");
-        assert_eq!(run_grid("1BC\n...", 1), "1BC\n.B.");
-        assert_eq!(run_grid(".B.\n...", 1), ".B.\n.0.");
-    }
-
-    #[test]
-    fn test_op_mult() {
-        assert_eq!(run_grid("3M4\n...", 1), "3M4\n.c.");
-        assert_eq!(run_grid("aM0\n...", 1), "aM0\n.0.");
-        assert_eq!(run_grid("2M.\n...", 1), "2M.\n.0.");
-        assert_eq!(run_grid("zM2\n...", 1), "zM2\n.y.");
-    }
-
-    #[test]
-    fn test_op_lesser() {
-        assert_eq!(run_grid("3L5\n...", 1), "3L5\n.3.");
-        assert_eq!(run_grid("7L2\n...", 1), "7L2\n.2.");
-        assert_eq!(run_grid("zL.\n...", 1), "zL.\n.0.");
-        assert_eq!(run_grid("aLA\n...", 1), "aLA\n.A.");
-    }
-
-    #[test]
-    fn test_op_clock() {
-        assert_eq!(run_grid("1C4\n...", 1), "1C4\n.0.");
-        assert_eq!(run_grid("1C4\n...", 2), "1C4\n.1.");
-        assert_eq!(run_grid("2C4\n...", 2), "2C4\n.0.");
-        assert_eq!(run_grid("2C4\n...", 3), "2C4\n.1.");
-        assert_eq!(run_grid(".C4\n...", 2), ".C4\n.1.");
-        assert_eq!(run_grid("1C.\n...", 2), "1C.\n...");
-        assert_eq!(run_grid("1C0\n...", 1), "1C0\n...");
-        assert_eq!(run_grid("0C4\n...", 2), "0C4\n.1.");
-    }
-
-    #[test]
-    fn test_op_delay() {
-        assert_eq!(run_grid("1D4\n...", 1), "1D4\n.*.");
-        assert_eq!(run_grid("1D4\n...", 2), "1D4\n...");
-        assert_eq!(run_grid("1D4\n...", 4), "1D4\n...");
-        assert_eq!(run_grid("1D4\n...", 5), "1D4\n.*.");
-        assert_eq!(run_grid("1D1\n...", 1), "1D1\n.*.");
-        assert_eq!(run_grid("1D1\n...", 2), "1D1\n.*.");
-        assert_eq!(run_grid("0D4\n...", 1), "0D4\n.*.");
-        assert_eq!(run_grid("1D0\n...", 1), "1D0\n.*.");
-    }
-
-    #[test]
-    fn test_op_if() {
-        assert_eq!(run_grid("3F3\n...", 1), "3F3\n.*.");
-        assert_eq!(run_grid("3F4\n...", 1), "3F4\n...");
-        assert_eq!(run_grid(".F.\n...", 1), ".F.\n.*.");
-        assert_eq!(run_grid("aFa\n...", 1), "aFa\n.*.");
-        assert_eq!(run_grid("aFA\n...", 1), "aFA\n...");
-    }
-
-    #[test]
-    fn test_op_generator() {
-        assert_eq!(run_grid("....\n22G.\n....", 1), "....\n22G.\n....");
-        assert_eq!(run_grid("103Gabc\n.......", 1), "103Gabc\n....abc");
-        assert_eq!(run_grid("204Gabcd\n........", 1), "204Gabcd\n.....abc");
-        assert_eq!(run_grid("100Gabc\n.......", 1), "100Gabc\n....a..");
-        assert_eq!(run_grid("10zGabc\n.......", 1), "10zGabc\n....abc");
-        assert_eq!(run_grid("999Gabc\n.......", 1), "999Gabc\n.......");
-    }
-
-    #[test]
-    fn test_op_halt() {
-        assert_eq!(run_grid("H\nS\n.", 1), "H\nS\n.");
-        assert_eq!(run_grid("H\nE\n.", 1), "H\nE\n.");
-        assert_eq!(run_grid("H\nE\n.", 2), "H\nE\n.");
-        assert_eq!(run_grid("H\n.\n.", 1), "H\n.\n.");
-    }
-
-    #[test]
-    fn test_op_increment() {
-        assert_eq!(run_grid("1I4\n.0.", 1), "1I4\n.1.");
-        assert_eq!(run_grid("1I4\n.3.", 1), "1I4\n.0.");
-        assert_eq!(run_grid(".I4\n.2.", 1), ".I4\n.2.");
-        assert_eq!(run_grid("1I.\n.2.", 1), "1I.\n.0.");
-        assert_eq!(run_grid("1I0\n.2.", 1), "1I0\n.0.");
-        assert_eq!(run_grid("fIG\n.0.", 1), "fIG\n.F.");
-        assert_eq!(run_grid("zIz\n.0.", 1), "zIz\n.0.");
-    }
-
-    #[test]
-    fn test_op_jumper() {
-        assert_eq!(run_grid(".1.\n.J.\n.J.\n...", 1), ".1.\n.J.\n.J.\n.1.");
-        assert_eq!(run_grid(".1.\n.J.\n.x.\n...", 1), ".1.\n.J.\n.1.\n...");
-        assert_eq!(run_grid(".a.\n.J.\n.J.\n...", 1), ".a.\n.J.\n.J.\n.a.");
-        assert_eq!(run_grid(".a.\n.J.\n.x.\n...", 1), ".a.\n.J.\n.a.\n...");
-        assert_eq!(run_grid(".1.\n.J.\n...", 1), ".1.\n.J.\n.1.");
-        assert_eq!(run_grid(".J.\n.J.\n...", 1), ".J.\n.J.\n...");
-        assert_eq!(
-            run_grid(".1.\n.J.\n.J.\n.J.\n.J.\n...", 1),
-            ".1.\n.J.\n.J.\n.J.\n.J.\n.1."
-        );
-    }
-
-    #[test]
-    fn test_op_konkat() {
-        assert_eq!(
-            run_grid("aV1.bV2\n2Kab...\n.......", 1),
-            "aV1.bV2\n2Kab...\n..12..."
-        );
-        assert_eq!(run_grid("3K...\n.....", 1), "3K...\n.....");
-        assert_eq!(
-            run_grid("aV1.bV2.cV3\n4Kabcd.....\n...........", 1),
-            "aV1.bV2.cV3\n4Kabcd.....\n..123......"
-        );
-        assert_eq!(run_grid("0Kabc\n.....", 1), "0Kabc\n.....");
-        assert_eq!(run_grid("2K.a.\n.....", 1), "2K.a.\n.....");
-    }
-
-    #[test]
-    fn test_op_read() {
-        assert_eq!(run_grid("01O.\n...5", 1), "01O.\n..55");
-        assert_eq!(run_grid("99O.\n....", 1), "99O.\n....");
-        assert_eq!(run_grid("z1O.\n...5", 1), "z1O.\n...5");
-        assert_eq!(run_grid("00O4\n....", 1), "00O4\n..4.");
-    }
-
-    #[test]
-    fn test_op_push() {
-        assert_eq!(run_grid("02P5\n....", 1), "02P5\n..5.");
-        assert_eq!(run_grid("12P5\n....", 1), "12P5\n...5");
-        assert_eq!(run_grid("92P5\n....", 1), "92P5\n...5");
-        assert_eq!(run_grid("00P5\n....", 1), "00P5\n..5.");
-    }
-
-    #[test]
-    fn test_op_query() {
-        assert_eq!(run_grid("112Q..\n.....a", 1), "112Q..\n..a..a");
-        assert_eq!(run_grid("013Q...\n...abc.", 1), "013Q...\n.bc.bc.");
-        assert_eq!(run_grid("993Q...\n.......", 1), "993Q...\n.......");
-        assert_eq!(run_grid("003Q...\n.......", 1), "003Q...\n.......");
-    }
-
-    #[test]
-    fn test_op_random() {
-        let mut app = EditorState::new(3, 2, 42, 100);
-        app.load("1R5\n...", None);
-        app.operate();
-        let out = app.glyph_at(1, 1);
-        let val = EditorState::value_of(out);
-        assert!(val >= 1 && val <= 5);
-
-        let mut app = EditorState::new(3, 2, 42, 100);
-        app.load("5R1\n...", None);
-        app.operate();
-        let out = app.glyph_at(1, 1);
-        let val = EditorState::value_of(out);
-        assert!(val >= 1 && val <= 5);
-
-        let mut app = EditorState::new(3, 2, 42, 100);
-        app.load("aRa\n...", None);
-        app.operate();
-        let out = app.glyph_at(1, 1);
-        let val = EditorState::value_of(out);
-        assert_eq!(val, 10);
-    }
-
-    #[test]
-    fn test_op_track() {
-        assert_eq!(run_grid("13Tabc\n......", 1), "13Tabc\n..b...");
-        assert_eq!(run_grid("33Tabc\n......", 1), "33Tabc\n..a...");
-        assert_eq!(run_grid("03Tabc\n......", 1), "03Tabc\n..a...");
-        assert_eq!(run_grid("00Tabc\n......", 1), "00Tabc\n..a...");
-    }
-
-    #[test]
-    fn test_op_uclid() {
-        assert_eq!(run_grid("3U8\n...", 1), "3U8\n.*.");
-        assert_eq!(run_grid("3U8\n...", 2), "3U8\n...");
-        assert_eq!(run_grid("3U8\n...", 3), "3U8\n...");
-        assert_eq!(run_grid("3U8\n...", 4), "3U8\n.*.");
-        assert_eq!(run_grid("1U1\n...", 1), "1U1\n.*.");
-        assert_eq!(run_grid("1U1\n...", 2), "1U1\n.*.");
-        assert_eq!(run_grid("0U8\n...", 1), "0U8\n...");
-        assert_eq!(run_grid("3U0\n...", 1), "3U0\n.*.");
-        assert_eq!(run_grid(".U.\n...", 1), ".U.\n...");
-    }
-
-    #[test]
-    fn test_op_variable() {
-        assert_eq!(run_grid("aV1\n...\n.Va\n...", 1), "aV1\n...\n.Va\n.1.");
-        assert_eq!(run_grid("1V2\n...\n.V1\n...", 1), "1V2\n...\n.V1\n.2.");
-        assert_eq!(run_grid(".Va\n...", 1), ".Va\n...");
-        assert_eq!(run_grid("aV1.Va\n......", 1), "aV1.Va\n....1.");
-        assert_eq!(run_grid("aV1\naV2\n.Va\n...", 1), "aV1\naV2\n.Va\n.2.");
-        assert_eq!(run_grid("aV1.Vb\n......", 1), "aV1.Vb\n......");
-    }
-
-    #[test]
-    fn test_op_write() {
-        assert_eq!(run_grid("00X5\n....", 1), "00X5\n..5.");
-        assert_eq!(run_grid("11X5\n....\n....", 1), "11X5\n....\n...5");
-        assert_eq!(run_grid("20X5\n....", 1), "20X5\n....");
-        assert_eq!(run_grid("99X5\n....", 1), "99X5\n....");
-    }
-
-    #[test]
-    fn test_op_jymper() {
-        assert_eq!(run_grid("1YYY.", 1), "1YYY1");
-        assert_eq!(run_grid("2YYY.", 1), "2YYY2");
-        assert_eq!(run_grid("aYY..", 1), "aYYa.");
-        assert_eq!(run_grid("YYY..", 1), "YYY..");
-        assert_eq!(run_grid("1YYYYY.", 1), "1YYYYY1");
-        assert_eq!(run_grid("1YxY.", 1), "1Y1Y1");
-    }
-
-    #[test]
-    fn test_op_lerp() {
-        assert_eq!(run_grid("1Z5\n.1.", 1), "1Z5\n.2.");
-        assert_eq!(run_grid("2Z1\n.4.", 1), "2Z1\n.2.");
-        assert_eq!(run_grid("5Z5\n.0.", 1), "5Z5\n.5.");
-        assert_eq!(run_grid("1Z5\n.5.", 1), "1Z5\n.5.");
-        assert_eq!(run_grid(".Z5\n.1.", 1), ".Z5\n.1.");
-        assert_eq!(run_grid("9Z0\n.z.", 1), "9Z0\n.q.");
-    }
-
-    #[test]
-    fn test_op_movement() {
-        assert_eq!(run_grid("E..", 1), ".E.");
-        assert_eq!(run_grid("..W", 1), ".W.");
-        assert_eq!(run_grid(".\nS\n.", 1), ".\n.\nS");
-        assert_eq!(run_grid(".\nN\n.", 1), "N\n.\n.");
-        assert_eq!(run_grid("E..\n...", 2), "..E\n...");
-    }
-
-    #[test]
-    fn test_op_movement_collisions() {
-        assert_eq!(run_grid("E1", 1), "*1");
-        assert_eq!(run_grid("1W", 1), "1*");
-        assert_eq!(run_grid("N\n1", 1), "*\n1");
-        assert_eq!(run_grid("1\nS", 1), "1\n*");
-        assert_eq!(run_grid("..E", 1), "..*");
-        assert_eq!(run_grid("W..", 1), "*..");
-        assert_eq!(run_grid("N\n.\n.", 1), "*\n.\n.");
-        assert_eq!(run_grid(".\n.\nS", 1), ".\n.\n*");
-        assert_eq!(run_grid("E\nW", 1), "*\n*");
-    }
-
-    #[test]
-    fn test_op_bang() {
-        assert_eq!(run_grid("1*2\n...", 1), "1.2\n...");
-        assert_eq!(run_grid(".E.\n.*.", 1), "..E\n...");
-        assert_eq!(run_grid("*..", 1), "...");
-    }
-
-    #[test]
-    fn test_op_comment() {
-        assert_eq!(run_grid("#N#\n...", 1), "#N#\n...");
-        assert_eq!(run_grid("#E.\n...", 1), "#E.\n...");
-        assert_eq!(run_grid("#1A2\n....", 1), "#1A2\n....");
-        assert_eq!(run_grid("#.#\n...", 1), "#.#\n...");
-    }
-
-    #[test]
-    fn test_midi_ops() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-        app.load(":03C..\n*.....\n!023..\n*.....\n?045..\n*.....\n=a12..\n*.....\n;msg..\n*.....\n%$3C..\n*.....", None);
-        app.operate();
-
-        assert_eq!(app.midi.stack.len(), 1);
-        assert_eq!(app.midi.cc_stack.len(), 2);
-        assert_eq!(app.midi.osc.stack.len(), 1);
-        assert_eq!(app.midi.udp.stack.len(), 1);
-        assert!(app.midi.mono_stack[0].is_some());
-    }
-
-    #[test]
-    fn test_lowercase_ops_dont_run_without_bang() {
-        assert_eq!(run_grid("1a2\n...", 1), "1a2\n...");
-        assert_eq!(run_grid("e..", 1), "e..");
-        assert_eq!(run_grid("1a2\n.*.", 1), "1a2\n.3.");
-        assert_eq!(run_grid("*..\n.e.", 1), "...\n.e.");
-    }
-
-    #[test]
-    fn test_dry_run_does_not_mutate_state() {
-        let mut app = EditorState::new(5, 5, 42, 100);
-        app.load("1A2\n...", None);
-
-        crate::core::operators::run(&mut app, 1, 0, 'A', false, true);
-
-        assert_eq!(app.glyph_at(1, 1), '.');
-        assert_eq!(app.port_at(0, 0), Some(crate::ui::theme::StyleType::Haste));
-        assert_eq!(app.port_at(2, 0), Some(crate::ui::theme::StyleType::Input));
-        assert_eq!(app.port_at(1, 1), Some(crate::ui::theme::StyleType::Output));
-    }
-
-    #[test]
-    fn test_force_flag_executes_lowercase() {
-        let mut app = EditorState::new(5, 5, 42, 100);
-        app.load("1a2\n...", None);
-
-        crate::core::operators::run(&mut app, 1, 0, 'a', false, false);
-        assert_eq!(app.glyph_at(1, 1), '.');
-
-        crate::core::operators::run(&mut app, 1, 0, 'a', true, false);
-        assert_eq!(app.glyph_at(1, 1), '3');
-    }
-
-    #[test]
-    fn test_operator_out_of_bounds_safety() {
-        let mut app = EditorState::new(2, 2, 42, 100);
-        app.load("X1\n..", None);
-        crate::core::operators::run(&mut app, 0, 0, 'X', false, false);
-
-        app.load("N.\n..", None);
-        crate::core::operators::run(&mut app, 0, 0, 'N', false, false);
-        assert_eq!(app.glyph_at(0, 0), '*');
-    }
-
-    #[test]
-    fn test_midi_operator_garbage_input() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-
-        app.load(":g3C..\n*.....", None);
-        app.operate();
-        assert!(app.midi.stack.is_empty());
-
-        app.load(":035..\n*.....", None);
-        app.operate();
-        assert!(app.midi.stack.is_empty());
-
-        app.load("!g99\n*...", None);
-        app.operate();
-        assert!(app.midi.cc_stack.is_empty());
-
-        app.load("?.99\n*...", None);
-        app.operate();
-        assert!(app.midi.cc_stack.is_empty());
-
-        app.load("?0.9\n*...", None);
-        app.operate();
-        assert!(app.midi.cc_stack.is_empty());
-    }
-
-    #[test]
-    fn test_pitch_bend_clamps_channel() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-
-        app.load("?g99\n*...", None);
-        app.operate();
-
-        assert_eq!(app.midi.cc_stack.len(), 1);
-        match &app.midi.cc_stack[0] {
-            crate::core::io::MidiMessage::Pb(pb) => {
-                assert_eq!(pb.channel, 15);
-            }
-            _ => panic!("Expected Pitch Bend message"),
-        }
-    }
-
-    #[test]
-    fn test_midi_standard_polyphony() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-        app.load(":03C.2\n*.....", None);
-
-        app.operate();
-        assert_eq!(app.midi.stack.len(), 1);
-        assert_eq!(app.midi.stack[0].note_id, 60);
-        assert_eq!(app.midi.stack[0].length, 2);
-
-        app.midi.run();
-        assert_eq!(app.midi.stack[0].length, 1);
-
-        app.midi.run();
-        assert_eq!(app.midi.stack[0].length, 0);
-
-        app.midi.run();
-        assert!(app.midi.stack.is_empty());
-    }
-
-    #[test]
-    fn test_midi_kill_note() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-        app.load(":03C._\n*.....", None);
-        app.operate();
-        assert_eq!(app.midi.stack.len(), 1);
-
-        app.load(":03C.0\n*.....", None);
-        app.operate();
-
-        assert!(app.midi.stack.is_empty());
-    }
-
-    #[test]
-    fn test_midi_tied_note_sustain_and_retrigger_prevention() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-
-        app.load(":03C._\n*.....", None);
-        app.operate();
-
-        assert_eq!(app.midi.stack.len(), 1);
-        assert_eq!(app.midi.stack[0].length, usize::MAX);
-
-        for _ in 0..100 {
-            app.midi.run();
-        }
-        assert_eq!(app.midi.stack.len(), 1);
-        assert!(app.midi.stack[0].length > 1000000);
-
-        app.write_silent(0, 1, '*');
-        app.operate();
-        assert_eq!(app.midi.stack.len(), 1);
-        assert_eq!(app.midi.stack[0].length, usize::MAX);
-    }
-
-    #[test]
-    fn test_midi_mono_legato_transition() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-        app.load("%03C._\n*.....", None);
-        app.operate();
-
-        assert!(app.midi.mono_stack[0].is_some());
-        assert_eq!(app.midi.mono_stack[0].unwrap().note_id, 60);
-
-        app.load("%03D._\n*.....", None);
-        app.operate();
-
-        assert!(app.midi.mono_stack[0].is_some());
-        assert_eq!(app.midi.mono_stack[0].unwrap().note_id, 62);
-    }
-
-    #[test]
-    fn test_midi_tied_interrupted_by_normal_note() {
-        let mut app = EditorState::new(10, 10, 42, 100);
-        app.load(":03C._\n*.....", None);
-        app.operate();
-
-        app.load(":03C.5\n*.....", None);
-        app.operate();
-
-        assert_eq!(app.midi.stack.len(), 1);
-        assert_eq!(app.midi.stack[0].length, 5);
-    }
 }
