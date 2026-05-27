@@ -169,8 +169,6 @@ pub enum MidiMessage {
     Pb(MidiPb),
 }
 
-/// Main-thread MIDI facade: accumulates note/CC events from operators and
-/// communicates with the [`MidiClock`] thread.
 pub struct MidiState {
     /// Polyphonic note stack: notes are added by `:` and removed after their
     /// `length` counts down to zero.
@@ -180,6 +178,9 @@ pub struct MidiState {
     pub mono_stack: [Option<MidiNote>; MIDI_CHANNELS],
     /// Pending CC and Pitch Bend messages, cleared after each [`flush`](MidiState::flush) call.
     pub cc_stack: Vec<MidiMessage>,
+    /// Holds the total number of queued events (notes, CC, OSC, UDP) at the time
+    /// of the last `flush`.
+    pub last_io_count: usize,
     /// OSC output state: pending message queue and destination port.
     pub osc: Osc,
     /// UDP output state: pending datagram queue and destination port.
@@ -280,6 +281,7 @@ impl MidiState {
             input_index: -1,
             ip: String::from("127.0.0.1"),
             osc_midi_bidule: None,
+            last_io_count: 0,
             pending: Vec::new(),
             frame_tx,
             cmd_tx,
@@ -492,6 +494,12 @@ impl MidiState {
     /// If the clock thread's channel is full the frame is silently dropped
     /// (the clock thread has fallen more than two frames behind — extremely rare).
     pub fn flush(&mut self) {
+        self.last_io_count = self.stack.len()
+            + self.mono_stack.iter().flatten().count()
+            + self.cc_stack.len()
+            + self.osc.stack.len()
+            + self.udp.stack.len();
+
         self.run();
         let frame = MidiFrame {
             bytes: std::mem::take(&mut self.pending),
