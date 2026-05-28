@@ -191,11 +191,11 @@ impl EditorState {
 
             for y in self.cursor.min_y..=self.cursor.max_y {
                 for x in self.cursor.min_x..=self.cursor.max_x {
-                    if let Some(idx) = self.index_at(x, y) {
-                        if self.o2.cells[idx] != allowed_g {
-                            self.o2.cells[idx] = allowed_g;
-                            changed = true;
-                        }
+                    if let Some(idx) = self.index_at(x, y) 
+                        && self.o2.cells[idx] != allowed_g 
+                    {
+                        self.o2.cells[idx] = allowed_g;
+                        changed = true;
                     }
                 }
             }
