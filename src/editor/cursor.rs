@@ -172,19 +172,35 @@ impl EditorState {
             && y <= self.cursor.max_y
     }
 
-    /// Writes `g` at the cursor position.
+    /// Writes `g` into every selected cell.
     ///
     /// In [`InputMode::Append`] the cursor advances one cell to the right after
     /// a successful write. A history snapshot is only recorded when the cell
     /// value actually changes.
     pub fn write_cursor(&mut self, g: char) {
-        if let Some(idx) = self.index_at(self.cursor.cx, self.cursor.cy) {
-            let allowed_g = if Self::is_allowed(g) { g } else { '.' };
-            if self.o2.cells[idx] != allowed_g {
+        let allowed_g = if Self::is_allowed(g) { g } else { '.' };
+
+        if self.mode == InputMode::Append {
+            if let Some(idx) = self.index_at(self.cursor.cx, self.cursor.cy) {
                 self.o2.cells[idx] = allowed_g;
-                if self.mode == InputMode::Append {
-                    self.move_cursor(1, 0);
+                self.move_cursor(1, 0);
+                self.history.record(&self.o2.cells);
+            }
+        } else {
+            let mut changed = false;
+
+            for y in self.cursor.min_y..=self.cursor.max_y {
+                for x in self.cursor.min_x..=self.cursor.max_x {
+                    if let Some(idx) = self.index_at(x, y)
+                        && self.o2.cells[idx] != allowed_g
+                    {
+                        self.o2.cells[idx] = allowed_g;
+                        changed = true;
+                    }
                 }
+            }
+
+            if changed {
                 self.history.record(&self.o2.cells);
             }
         }
