@@ -9,9 +9,9 @@ Rust port of the ORCΛ esoteric programming language and terminal livecoding env
 
 [![CI](https://github.com/coignard/o2/workflows/CI/badge.svg)](https://github.com/coignard/o2/actions)
 [![CodeQL](https://github.com/coignard/o2/workflows/CodeQL/badge.svg)](https://github.com/coignard/o2/security/code-scanning)
-[![Documentation](https://docs.rs/o2-rs/badge.svg)](https://docs.rs/o2-rs)
+[![Documentation](https://img.shields.io/docsrs/o2-rs?logo=docs.rs)](https://docs.rs/o2-rs)
 [![codecov](https://codecov.io/github/coignard/o2/graph/badge.svg?token=CQSZUALQ0A)](https://codecov.io/github/coignard/o2)
-[![Crates.io](https://img.shields.io/crates/v/o2-rs.svg)](https://crates.io/crates/o2-rs)
+[![Crates.io](https://img.shields.io/crates/v/o2-rs.svg?logo=rust)](https://crates.io/crates/o2-rs)
 [![License: GPL-3.0-or-later](https://img.shields.io/crates/l/o2-rs.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/coignard)
 
