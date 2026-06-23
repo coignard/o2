@@ -16,7 +16,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use o2_rs::core::oxygen::EditorState;
+use o2_rs::core::midi::MidiEngine;
+use o2_rs::core::oxygen::OxygenEngine;
 
 const GRIDS: &[(&str, &str)] = &[
     ("io", include_str!("../examples/benchmarks/io.o2")),
@@ -34,11 +35,11 @@ const GRIDS: &[(&str, &str)] = &[
     ("rw", include_str!("../examples/benchmarks/rw.o2")),
 ];
 
-fn setup_app(grid_str: &str, w: usize, h: usize) -> EditorState {
-    let mut app = EditorState::new(w, h, 42, 100);
-    app.load(grid_str, None);
-    app.resize(w, h);
-    app
+fn setup_engine(grid_str: &str, w: usize, h: usize) -> (OxygenEngine, MidiEngine) {
+    let mut engine = OxygenEngine::new(w, h, 42);
+    engine.load_grid(grid_str);
+    engine.resize_grid(w, h);
+    (engine, MidiEngine::new())
 }
 
 fn bench_time_scaling(c: &mut Criterion) {
@@ -52,11 +53,13 @@ fn bench_time_scaling(c: &mut Criterion) {
                 &frames,
                 |b, &f| {
                     b.iter_batched_ref(
-                        || setup_app(grid, 64, 64),
-                        |app| {
+                        || setup_engine(grid, 64, 64),
+                        |(engine, midi)| {
                             for _ in 0..f {
-                                app.operate();
-                                app.o2.f += 1;
+                                engine.tick(midi);
+                                engine.f += 1;
+                                midi.run();
+                                midi.pending.clear();
                             }
                         },
                         BatchSize::LargeInput,
@@ -79,11 +82,13 @@ fn bench_space_scaling(c: &mut Criterion) {
                 &size,
                 |b, &s| {
                     b.iter_batched_ref(
-                        || setup_app(grid, s, s),
-                        |app| {
+                        || setup_engine(grid, s, s),
+                        |(engine, midi)| {
                             for _ in 0..10 {
-                                app.operate();
-                                app.o2.f += 1;
+                                engine.tick(midi);
+                                engine.f += 1;
+                                midi.run();
+                                midi.pending.clear();
                             }
                         },
                         BatchSize::LargeInput,
