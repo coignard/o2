@@ -1,16 +1,15 @@
 coverage:
   precision: 1
   round: down
-  range: 85..100
+  range: 60..90
   status:
     project:
       default:
         threshold: 1%
 ignore:
   - "benches"
-  - "src/ui"
-  - "src/core/io"
+  - "tests"
+  - "src/app"
   - "src/main.rs"
-  - "src/editor/input.rs"
 comment:
   require_changes: true
