@@ -315,9 +315,7 @@ fn sanitize_paste(text: &str) -> String {
                 }
                 None => {}
             }
-        } else if c == '\n' || c == '\r' {
-            out.push(c);
-        } else if !c.is_control() {
+        } else if c == '\n' || c == '\r' || !c.is_control() {
             out.push(c);
         }
     }
