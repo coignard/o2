@@ -15,17 +15,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-/// Grid state, cell I/O, frame execution, and editor coordinator.
-pub mod oxygen;
-
-/// MIDI output, OSC, and UDP I/O.
-pub mod io;
-
-/// Operator dispatcher.
-pub mod operators;
-
-/// Human-readable operator names and glyph classification.
 pub mod glyph;
-
-/// Glyph-to-MIDI-note mapping.
+pub mod midi;
+pub mod operators;
+pub mod oxygen;
 pub mod transpose;

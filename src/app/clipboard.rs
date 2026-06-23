@@ -20,7 +20,6 @@ use std::io::Write as _;
 #[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
 
-/// Copies `text` to the system clipboard.
 pub fn copy(text: &str) {
     #[cfg(target_os = "linux")]
     {
@@ -38,7 +37,6 @@ pub fn copy(text: &str) {
     }
 }
 
-/// Returns the current clipboard text, or `None` if unavailable.
 pub fn paste() -> Option<String> {
     if let Ok(mut ctx) = arboard::Clipboard::new()
         && let Ok(text) = ctx.get_text()

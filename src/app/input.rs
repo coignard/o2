@@ -15,27 +15,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Keyboard, mouse, and bracketed paste event handling.
-//!
-//! This module translates raw crossterm events into calls on [`EditorState`].  It is
-//! the sole entry point for all user input; the main loop forwards every
-//! [`Event`] it receives to one of the three public functions here.
-//!
-//! # Structure
-//!
-//! - [`handle_key`] -- dispatches key presses.  When a popup is open it is
-//!   handled first; unconsumed keys fall through to the commander or the main
-//!   editing layer.
-//! - [`handle_mouse`] -- handles click, drag, and scroll events.  Popup-aware:
-//!   clicks inside the topmost popup interact with that popup; clicks outside
-//!   dismiss it.
-//! - [`handle_paste`] -- routes bracketed paste text either to the commander
-//!   query string or to the grid via [`EditorState::paste_text`].
-
-use crate::core::oxygen::EditorState;
-use crate::core::oxygen::{InputMode, PopupType, PromptPurpose};
-use crate::editor::clipboard;
-use crate::editor::commander::{preview_command, run_command};
+use crate::app::clipboard;
+use crate::app::commander::{preview_command, run_command};
+use crate::app::editor::EditorState;
+use crate::app::types::{InputMode, PopupType, PromptPurpose};
 use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
 use crossterm::event::{
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -68,22 +51,6 @@ fn main_menu_down(mut sel: usize) -> usize {
     sel
 }
 
-/// Converts a given `chrono::DateTime` to an Arvelie-Neralie date-time string.
-///
-/// The Arvelie calendar divides the year into 26 fortnights labelled `A`-`Z`,
-/// plus a short overflow period labelled `+`. The Neralie time is expressed as
-/// a six-digit decimal fraction of the day (0-999999).
-///
-/// # Examples
-///
-/// ```
-/// use chrono::{TimeZone, Utc};
-/// use o2_rs::editor::input::datetime_to_arvelie_neralie;
-///
-/// // 1970-01-01 00:00:00.000 UTC → year 70, fortnight A, day 01, neralie 000000
-/// let dt = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
-/// assert_eq!(datetime_to_arvelie_neralie(&dt), "70A01-000000");
-/// ```
 pub fn datetime_to_arvelie_neralie<T: TimeZone>(datetime: &DateTime<T>) -> String {
     let year = datetime.year();
     let y_str = format!("{:02}", year.rem_euclid(100));
@@ -106,20 +73,10 @@ pub fn datetime_to_arvelie_neralie<T: TimeZone>(datetime: &DateTime<T>) -> Strin
     format!("{}{}{:02}-{:06}", y_str, m, d, neralie)
 }
 
-/// Returns the current local wall-clock time formatted as an Arvelie-Neralie string.
-///
-/// Reads the system clock via [`chrono::Local`] and delegates to
-/// [`datetime_to_arvelie_neralie`].
 pub fn arvelie_neralie() -> String {
     datetime_to_arvelie_neralie(&Local::now())
 }
 
-/// Handles a mouse event, routing it to the active popup or to the grid.
-///
-/// When one or more popups are open, mouse events are delivered only to the
-/// topmost popup.  A left-click inside the popup interacts with its items; a
-/// left-click outside dismisses the popup.  Scroll events on the grid move
-/// the cursor one cell in the corresponding direction.
 pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
     app.last_input_was_mouse = true;
     let col = mouse_event.column;
@@ -133,7 +90,7 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
         let mut top_rect = Rect::default();
         let mut prev_rect = None;
         for p in &app.popup {
-            top_rect = crate::ui::render::get_popup_rect(term_area, p, prev_rect);
+            top_rect = crate::app::ui::render::get_popup_rect(term_area, p, prev_rect);
             prev_rect = Some(top_rect);
         }
 
@@ -321,11 +278,6 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
     }
 }
 
-/// Handles a bracketed paste event from the terminal.
-///
-/// When the commander is active, newlines are stripped from the pasted text
-/// and it is appended to the query string, triggering a live preview.
-/// Otherwise the text is passed directly to [`EditorState::paste_text`].
 pub fn handle_paste(app: &mut EditorState, text: &str) {
     app.last_input_was_mouse = false;
     if app.commander.active {
@@ -337,18 +289,6 @@ pub fn handle_paste(app: &mut EditorState, text: &str) {
     }
 }
 
-/// Handles a key press event, dispatching it to the active layer.
-///
-/// The dispatch order is:
-///
-/// 1. If a popup is open, the key is offered to the topmost popup first.
-///    Popups that consume the key return early.  Some popups spawn child
-///    popups or request that the parent popup be dismissed.
-/// 2. If the commander is active, [`handle_commander_key`] is called.
-/// 3. Otherwise [`handle_main_key`] processes the key in the main editing
-///    layer.
-///
-/// Returns `true` if the screen needs to be redrawn immediately.
 pub fn handle_key(app: &mut EditorState, key: KeyEvent) -> bool {
     if key.kind != KeyEventKind::Press && key.kind != KeyEventKind::Repeat {
         return false;
@@ -497,10 +437,7 @@ fn handle_popup_key(
                 }
                 11 => spawn_popups.push(PopupType::ClockMenu { selected: 0 }),
                 13 => spawn_popups.push(PopupType::Controls),
-                14 => {
-                    app.guide = !app.guide;
-                    close_popup = true;
-                }
+                14 => spawn_popups.push(PopupType::Operators),
                 15 => spawn_popups.push(PopupType::About {
                     opened_at: std::time::Instant::now(),
                 }),
@@ -529,7 +466,9 @@ fn handle_popup_key(
             KeyCode::Up => *selected = selected.saturating_sub(1),
             KeyCode::Down => *selected = (*selected + 1).min(devices.len().saturating_sub(1)),
             KeyCode::Char(' ') => {
-                app.set_midi_device(*selected);
+                if let Some(name) = devices.get(*selected).cloned() {
+                    app.set_midi_device(&name);
+                }
             }
             KeyCode::Enter | KeyCode::Right => {}
             _ => {}
@@ -919,7 +858,7 @@ fn handle_main_key(
                 app.midi.send_clock_stop();
             }
             app.operate();
-            app.midi.run();
+            app.midi.flush();
             app.o2.f += 1;
         }
 
@@ -1045,6 +984,15 @@ fn handle_main_key(
             }
         }
 
+        KeyCode::Char(' ') if ctrl => {
+            app.paused = !app.paused;
+            if app.paused {
+                app.midi.silence();
+                app.midi.send_clock_stop();
+            } else {
+                app.midi.send_clock_start();
+            }
+        }
         KeyCode::Char(' ') => {
             if app.mode == InputMode::Append {
                 app.move_cursor(1, 0);
@@ -1052,9 +1000,6 @@ fn handle_main_key(
                 app.paused = !app.paused;
                 if app.paused {
                     app.midi.silence();
-                    app.midi.send_clock_stop();
-                } else {
-                    app.midi.send_clock_start();
                 }
             }
         }
@@ -1104,19 +1049,6 @@ fn handle_main_key(
     needs_draw
 }
 
-/// Returns the shortest suffix needed to complete `input` to the first
-/// matching filesystem entry, or `None` if there is no match or the input
-/// is already complete.
-///
-/// The completion is prefix-based: the directory portion of `input` is
-/// scanned and the first entry (sorted lexicographically) whose name starts
-/// with the file-name portion of `input` is returned. Hidden entries (names
-/// starting with `'.'`) are skipped unless the prefix itself starts with
-/// `'.'`. A trailing path separator is appended automatically when the
-/// matched entry is a directory.
-///
-/// Used by the [`PopupType::Prompt`] renderer and the Tab key handler to
-/// provide interactive path completion in Open and Save As dialogues.
 pub fn autocomplete_path(input: &str) -> Option<String> {
     let path = std::path::Path::new(input);
     let (dir, file_prefix) = if input.is_empty() {

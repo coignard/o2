@@ -15,11 +15,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-/// System clipboard access with subprocess fallbacks on Linux.
 pub mod clipboard;
-pub mod clock;
 pub mod commander;
 pub mod cursor;
+pub mod editor;
 pub mod history;
 pub mod input;
+pub mod midi;
 pub mod types;
+pub mod ui;

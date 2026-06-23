@@ -15,14 +15,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Entry point and main event loop.
-//!
-//! [`main`] initialises the crossterm raw-mode terminal, creates an [`EditorState`],
-//! and drives the event loop. MIDI Beat Clock timing and note dispatch are
-//! handled entirely by the dedicated `midi-clock` thread (see
-//! [`o2_rs::core::io::clock`]); the main loop only drives the engine at the
-//! correct frame rate and renders the UI.
-
 use anyhow::Result;
 use clap::Parser;
 use crossterm::{
@@ -33,16 +25,17 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use o2_rs::{
-    core::oxygen::{EditorState, PopupType},
-    editor::input,
-    ui::render,
-};
+mod app;
+
+use app::editor::EditorState;
+use app::input;
+use app::types::PopupType;
+use app::ui::render;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{
     io::{self, Stdout},
     path::PathBuf,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 #[derive(Parser, Debug)]
@@ -121,6 +114,23 @@ struct Cli {
         help_heading = "General options"
     )]
     version: Option<bool>,
+
+    /// Connect to a MIDI output port by name or index.
+    /// Default: first available port
+    #[arg(
+        long,
+        value_name = "port",
+        num_args = 0..=1,
+        default_missing_value = "",
+        hide_default_value = true,
+        help_heading = "OSC/MIDI options",
+        verbatim_doc_comment
+    )]
+    midi: Option<String>,
+
+    /// List available MIDI output ports and exit.
+    #[arg(long, help_heading = "OSC/MIDI options")]
+    midi_list: bool,
 
     /// Set MIDI to be sent via OSC formatted for Plogue Bidule.
     /// The path argument is the path of the Plogue OSC MIDI device.
@@ -205,7 +215,6 @@ fn run_app(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     _cli: &Cli,
 ) -> Result<()> {
-    let mut next_frame_tick = Instant::now();
     let mut needs_draw = true;
 
     loop {
@@ -240,18 +249,11 @@ fn run_app(
             needs_draw = false;
         }
 
-        let tick_rate = Duration::from_millis(if app.paused {
-            100
+        let mut timeout = if app.paused {
+            Duration::from_millis(100)
         } else {
-            60000 / app.bpm.max(1) as u64 / 4
-        });
-
-        let now = Instant::now();
-        let mut timeout = next_frame_tick.saturating_duration_since(now);
-
-        if app.midi.is_puppet() {
-            timeout = timeout.min(tick_rate / 4);
-        }
+            Duration::from_millis(3)
+        };
 
         if app
             .popup
@@ -285,26 +287,11 @@ fn run_app(
             }
         }
 
-        let now = Instant::now();
-        let puppet_tick = app.midi.poll_puppet_tick();
-        let timer_tick = !app.midi.is_puppet() && now >= next_frame_tick;
-
-        if puppet_tick || timer_tick {
-            if !app.paused {
-                app.operate();
-                app.midi.flush();
-                app.o2.f += 1;
-                needs_draw = true;
-            }
-            if timer_tick {
-                next_frame_tick += tick_rate;
-
-                // Ant mill: reset if we fall more than two frames behind.
-                let now = Instant::now();
-                if now.duration_since(next_frame_tick) > tick_rate * 2 {
-                    next_frame_tick = now + tick_rate;
-                }
-            }
+        while !app.paused && app.midi.take_engine_tick() {
+            app.operate();
+            app.midi.flush();
+            app.o2.f += 1;
+            needs_draw = true;
         }
 
         if !app.running {
@@ -319,6 +306,13 @@ fn run_app(
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    if cli.midi_list {
+        for (i, name) in app::midi::output_ports().iter().enumerate() {
+            println!("{i}: {name}");
+        }
+        return Ok(());
+    }
 
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
@@ -354,6 +348,10 @@ fn main() -> Result<()> {
     app.midi.osc_midi_bidule = cli.osc_midi_bidule.clone();
     app.bw = cli.bw;
     app.contrast = cli.contrast;
+
+    if let Some(midi_arg) = &cli.midi {
+        app.midi.select_output_by_arg(midi_arg);
+    }
 
     if let Some(path) = &cli.file
         && let Ok(content) = std::fs::read_to_string(path)

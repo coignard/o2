@@ -15,25 +15,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Terminal user interface rendering.
-//!
-//! This module implements the complete draw cycle for o2, covering:
-//!
-//! - The main grid, with glyphs, port decorations, selection highlights, and
-//!   scroll offsets computed dynamically to follow the cursor.
-//! - The two-row status bar below the grid, showing the inspector, cursor
-//!   position, frame counter, MIDI activity, BPM clock, and variables.
-//! - All overlay popups stacked on top of the grid, from the main menu to
-//!   single-line prompts and informational cards.
-//!
-//! The primary entry point is [`draw`], which is called once per render tick
-//! from the main loop.
-
-#![allow(clippy::manual_is_multiple_of)]
-
-use crate::core::oxygen::{EditorState, InputMode, PopupType, PromptPurpose};
-use crate::editor::input::autocomplete_path;
-use crate::ui::theme::{B_HIGH, B_INV, BG, F_HIGH, F_INV, F_LOW, F_MED, StyleType, darken};
+use crate::app::editor::EditorState;
+use crate::app::input::autocomplete_path;
+use crate::app::types::{InputMode, PopupType, PromptPurpose};
+use crate::app::ui::theme::{B_HIGH, B_INV, BG, F_HIGH, F_INV, F_LOW, F_MED, darken, style_colors};
+use o2_rs::core::oxygen::StyleType;
 use ratatui::{
     Frame,
     layout::{Constraint, HorizontalAlignment, Layout, Rect},
@@ -43,7 +29,7 @@ use ratatui::{
 };
 
 fn is_marker(app: &EditorState, x: usize, y: usize) -> bool {
-    x % app.grid_w == 0 && y % app.grid_h == 0
+    x.is_multiple_of(app.grid_w) && y.is_multiple_of(app.grid_h)
 }
 
 fn is_near(app: &EditorState, x: usize, y: usize) -> bool {
@@ -55,7 +41,9 @@ fn is_near(app: &EditorState, x: usize, y: usize) -> bool {
 }
 
 fn is_locals(app: &EditorState, x: usize, y: usize) -> bool {
-    is_near(app, x, y) && (x * 4) % app.grid_w.max(1) == 0 && (y * 4) % app.grid_h.max(1) == 0
+    is_near(app, x, y)
+        && x.is_multiple_of((app.grid_w / 4).max(1))
+        && y.is_multiple_of((app.grid_h / 4).max(1))
 }
 
 fn is_invisible(app: &EditorState, x: usize, y: usize, g: char) -> bool {
@@ -94,19 +82,18 @@ struct UiChar {
     bg: Color,
 }
 
-/// Applies `custom_colors` overrides to an already-resolved `(fg, bg)` pair.
-///
-/// Index 0 is `b_low` (stored but not applied — no rendered cell uses it),
-/// index 1 replaces [`B_MED`](crate::ui::theme::B_MED) (operator accent),
-/// index 2 replaces [`B_HIGH`](crate::ui::theme::B_HIGH) (output/input accent).
 fn apply_custom_colors(fg: Color, bg: Color, custom: &[Option<(u8, u8, u8)>; 3]) -> (Color, Color) {
     let remap = |c: Color| -> Color {
-        if let Some((r, g, b)) = custom[1]
-            && c == crate::ui::theme::B_MED
+        if let Some((r, g, b)) = custom[0]
+            && c == crate::app::ui::theme::B_LOW
+        {
+            Color::Rgb(r, g, b)
+        } else if let Some((r, g, b)) = custom[1]
+            && c == crate::app::ui::theme::B_MED
         {
             Color::Rgb(r, g, b)
         } else if let Some((r, g, b)) = custom[2]
-            && c == crate::ui::theme::B_HIGH
+            && c == crate::app::ui::theme::B_HIGH
         {
             Color::Rgb(r, g, b)
         } else {
@@ -117,7 +104,7 @@ fn apply_custom_colors(fg: Color, bg: Color, custom: &[Option<(u8, u8, u8)>; 3])
 }
 
 fn resolve_colors(style: StyleType, bw: bool, contrast: bool) -> (Color, Color) {
-    let (fg, bg) = style.colors();
+    let (fg, bg) = style_colors(style);
     if bw {
         if bg.is_some() {
             (F_INV, F_HIGH)
@@ -129,7 +116,7 @@ fn resolve_colors(style: StyleType, bw: bool, contrast: bool) -> (Color, Color) 
     } else if contrast && matches!(style, StyleType::Default | StyleType::Locked) {
         (F_HIGH, BG)
     } else {
-        (fg.unwrap_or(crate::ui::theme::F_LOW), bg.unwrap_or(BG))
+        (fg.unwrap_or(crate::app::ui::theme::F_LOW), bg.unwrap_or(BG))
     }
 }
 
@@ -317,7 +304,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         contrast,
     );
 
-    let io_count = app.midi.last_io_count;
+    let io_count = app.midi.engine.last_io_count;
     let io_str = "|".repeat(io_count.min(gw.saturating_sub(1)));
     let io_inspect = format!("{:.<1$}", io_str, gw.saturating_sub(1));
     write_ui(
@@ -349,7 +336,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         let cmd_str = format!(
             "{}{}",
             app.commander.query,
-            if app.o2.f % 2 == 0 { "_" } else { "" }
+            if app.o2.f.is_multiple_of(2) { "_" } else { "" }
         );
         write_ui(
             &mut ui_l2,
@@ -399,7 +386,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         } else {
             String::new()
         };
-        let beat = if app.o2.f % 4 == 0 && diff == 0 {
+        let beat = if app.o2.f.is_multiple_of(4) && diff == 0 {
             "*"
         } else {
             ""
@@ -482,22 +469,6 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
     f.render_widget(Paragraph::new(status_lines), area);
 }
 
-/// Renders the complete UI to the given ratatui [`Frame`].
-///
-/// The terminal area is divided into two vertical sections:
-///
-/// 1. **Grid area** -- the scrollable ORCΛ grid, rendered as a [`Paragraph`]
-///    of styled [`Span`]s.  Consecutive cells that share the same style are
-///    merged into a single span for efficiency.
-/// 2. **Status area** -- two fixed rows at the bottom of the screen.  The
-///    upper row shows the cell inspector, cursor coordinates, selection size,
-///    frame counter, MIDI I/O indicators, and the MIDI input device name.
-///    The lower row shows either the commander prompt or the version, grid
-///    dimensions, BPM clock, active variables, and the MIDI output device
-///    name.
-///
-/// Popup overlays are drawn last, on top of everything else, using
-/// [`draw_popup_content`].
 pub fn draw(f: &mut Frame, app: &EditorState) {
     f.render_widget(Block::new().style(Style::new().bg(BG)), f.area());
 
@@ -516,15 +487,6 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
     }
 }
 
-/// Computes the bounding rectangle for a popup overlay.
-///
-/// Most informational popups (`Controls`, `Operators`, `About`, `Msg`) are
-/// always centred regardless of any previously rendered popup.  Menu and
-/// dialogue popups cascade to the right of the previous popup when there is
-/// room, then drop below it, and finally fall back to the top-left corner.
-///
-/// The returned rectangle is clamped so it never extends beyond the terminal
-/// area.
 pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect>) -> Rect {
     let (mut width, mut height) = match popup_type {
         PopupType::Controls => (57, 25),
@@ -1112,7 +1074,7 @@ fn draw_midi_popup(
     rect: Rect,
     selected: usize,
     devices: &[String],
-    active_idx: i32,
+    active_name: &str,
 ) {
     let list_items: Vec<ListItem> = if devices.is_empty() {
         vec![ListItem::new("  No devices found").style(popup_style)]
@@ -1121,7 +1083,7 @@ fn draw_midi_popup(
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let mark = if active_idx == i as i32 { '*' } else { ' ' };
+                let mark = if devices[i] == active_name { '*' } else { ' ' };
                 let prefix = if i == selected { '>' } else { ' ' };
                 let style = if i == selected {
                     bold_style
@@ -1168,7 +1130,7 @@ fn draw_prompt_popup(
 
     let mut spans = vec![Span::styled(" ", popup_style)];
 
-    let blink = app.o2.f % 2 == 0;
+    let blink = app.o2.f.is_multiple_of(2);
     let (cursor_fg_a, cursor_bg_a, cursor_fg_b, cursor_bg_b) = if app.bw {
         (F_HIGH, F_INV, F_INV, F_HIGH)
     } else {
@@ -1259,7 +1221,11 @@ fn draw_roflcopter_popup(f: &mut Frame, popup_style: Style, rect: Rect, frame_id
         "           ROFL COPTER!!!         ",
     ];
 
-    let frame = if frame_idx % 2 == 0 { FRAME_0 } else { FRAME_1 };
+    let frame = if frame_idx.is_multiple_of(2) {
+        FRAME_0
+    } else {
+        FRAME_1
+    };
 
     let mut lines = Vec::with_capacity(11);
     lines.push(Line::from(""));
@@ -1280,12 +1246,6 @@ fn draw_roflcopter_popup(f: &mut Frame, popup_style: Style, rect: Rect, frame_id
     f.render_widget(p, rect);
 }
 
-/// Renders the content of a single popup overlay into `rect`.
-///
-/// Each [`PopupType`] variant is drawn with an amber background and black
-/// foreground (the `b_inv` / `f_inv` theme slots).  The widget kind varies:
-/// tables for reference cards, lists for menus, and paragraphs for text
-/// prompts and messages.
 fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, rect: Rect) {
     let (popup_style, bold_style) = if app.bw {
         let s = Style::new().bg(F_HIGH).fg(F_INV);
@@ -1322,7 +1282,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
             rect,
             *selected,
             devices,
-            app.midi.output_index,
+            &app.midi.device_name,
         ),
         PopupType::Prompt {
             purpose,
