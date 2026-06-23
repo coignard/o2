@@ -1,6 +1,6 @@
 [package]
 name = "o2-rs"
-version = "0.3.0"
+version = "0.3.1"
 authors = [
     "René Coignard <contact@renecoignard.com>"
 ]

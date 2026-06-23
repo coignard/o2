@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed
+
+Pasted text is now stripped of terminal escape sequences and control characters before being written to the grid. With mouse reporting enabled, some terminals interleave mouse-position reports into the paste stream. Their printable tail was previously written into the grid as stray glyphs on random pastes.
+
 ## 0.3.0
 
 ### Added
