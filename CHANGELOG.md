@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- `--midi [<port>]` flag (OSC/MIDI options): connect to a MIDI output port by name or index; with no value, connects to the first available port. If the name matches no existing port, a virtual output port with that name is created. The selected/created port name is shown in the status bar.
+- `--midi-list` flag: print the available MIDI output ports with their indices and exit.
+
+### Changed
+
+- The crate is now split into a pure, deterministic `o2_rs::core` library and a binary `app` layer. `core` (grid engine, operators, MIDI event production, glyph/transpose tables) performs no I/O and owns no threads or sockets; `app` holds the terminal UI, input handling, MIDI delivery, and the clock thread. This makes the engine independently testable and benchmarkable.
+- MIDI is now produced and delivered in two stages: `core` produces notes, CC, pitch-bend, OSC, and UDP events into buffers; `app` delivers them. The `$` (self) operator's commands are buffered during the frame and executed at end-of-frame instead of mid-scan, matching the produce/deliver model. Grids that do not use `$` are unaffected.
+- macOS MIDI output uses a CoreMIDI host-time timestamped backend driven by an incremental clock; a tempo change re-spaces only future pulses and never injects a spurious tick, eliminating drift on BPM changes.
+- The MIDI subsystem is grouped under `app/midi/`: `state` (the editor-facing handle), `clock` (the real-time timing and output thread), `wire` (the frame/command protocol), and `tempo` (BPM control).
+- Plain `Space` now toggles play/pause locally without emitting MIDI transport; `Ctrl+Space` additionally sends MIDI Clock Start/Stop, matching Orca's "Play/Pause Midi" split.
+- The `color` command now also applies its first field to `b_low` (previously parsed but ignored); fields map to `b_low;b_med;b_high`.
+- New `midi:<out>[;<in>]` command selects the MIDI output (and optionally input) device by index at runtime.
+- Undo history depth raised from 100 to 128 frames.
+- Local guide dots now use Orca's quarter-grid divisor (`x % (grid/4)`), matching the reference at every grid size.
+
+### Fixed
+
+- Pausing or quitting now sends an explicit Note-Off for every sounding note (poly and mono) in addition to All-Notes-Off (CC#123). Previously only CC#123 was sent, which some DAWs and synths ignore, leaving notes hanging. On quit, the clock thread drains its command queue before exiting so the note-offs and CC#123 are guaranteed to reach the device.
+
+### Tests
+
+- End-to-end tests (`tests/e2e.rs`) now run each grid in `tests/grids/` for the frames listed in its `tests/cases/*.json` case file and compare the resulting grid state against JSON snapshots in `tests/dumps/{name}/frame_{N}.json`. Snapshots are regenerated with `UPDATE_SNAPSHOTS=1 cargo test`.
+- The engine benchmark (`benches/engine_bench.rs`) drives `core` directly across real patches at multiple grid sizes and frame counts, exercising the full per-frame path including MIDI event production.
+
 ## 0.2.6
 
 ### Fixed
