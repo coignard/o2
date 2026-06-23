@@ -26,6 +26,8 @@ use crossterm::event::{
 use ratatui::layout::Rect;
 
 const MENU_EMPTY_ROWS: [usize; 5] = [4, 8, 10, 12, 16];
+const ESC: char = '\u{1b}';
+const BEL: char = '\u{07}';
 
 fn default_patch_name() -> String {
     format!("patch-{}.o2", arvelie_neralie())
@@ -278,14 +280,59 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
     }
 }
 
+fn sanitize_paste(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == ESC {
+            match chars.peek() {
+                Some('[') => {
+                    chars.next();
+                    while let Some(&n) = chars.peek() {
+                        chars.next();
+                        if ('@'..='~').contains(&n) {
+                            break;
+                        }
+                    }
+                }
+                Some(']') => {
+                    chars.next();
+                    while let Some(&n) = chars.peek() {
+                        chars.next();
+                        if n == BEL {
+                            break;
+                        }
+                        if n == ESC {
+                            if chars.peek() == Some(&'\\') {
+                                chars.next();
+                            }
+                            break;
+                        }
+                    }
+                }
+                Some(_) => {
+                    chars.next();
+                }
+                None => {}
+            }
+        } else if c == '\n' || c == '\r' {
+            out.push(c);
+        } else if !c.is_control() {
+            out.push(c);
+        }
+    }
+    out
+}
+
 pub fn handle_paste(app: &mut EditorState, text: &str) {
     app.last_input_was_mouse = false;
+    let text = sanitize_paste(text);
     if app.commander.active {
         let clean_text = text.replace(['\n', '\r'], "");
         app.commander.query.push_str(&clean_text);
         preview_command(app);
     } else {
-        app.paste_text(text);
+        app.paste_text(&text);
     }
 }
 
