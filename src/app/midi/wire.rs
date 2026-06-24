@@ -54,3 +54,32 @@ pub(crate) enum MidiCommand {
         pgm: Option<u8>,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{pack, unpack};
+
+    #[test]
+    fn pack_round_trips_through_unpack() {
+        let cases = [
+            (120u16, false, false, false),
+            (360, true, false, false),
+            (1, false, true, false),
+            (200, true, true, true),
+        ];
+        for (bpm, paused, bclock, stop) in cases {
+            assert_eq!(
+                unpack(pack(bpm, paused, bclock, stop)),
+                (bpm, paused, bclock, stop)
+            );
+        }
+    }
+
+    #[test]
+    fn flags_are_independent() {
+        let (_, paused, bclock, stop) = unpack(pack(120, true, false, true));
+        assert!(paused);
+        assert!(!bclock);
+        assert!(stop);
+    }
+}

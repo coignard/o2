@@ -221,3 +221,84 @@ impl EditorState {
         self.history.record(&self.o2.cells);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::app::editor::EditorState;
+    use crate::app::types::InputMode;
+
+    fn editor(w: usize, h: usize) -> EditorState {
+        EditorState::new(w, h, 1, 128)
+    }
+
+    #[test]
+    fn select_clamps_origin_into_grid() {
+        let mut e = editor(8, 8);
+        e.select(100, 100, 0, 0);
+        assert_eq!((e.cursor.cx, e.cursor.cy), (7, 7));
+    }
+
+    #[test]
+    fn select_clamps_negative_origin_to_zero() {
+        let mut e = editor(8, 8);
+        e.select(-5, -5, 0, 0);
+        assert_eq!((e.cursor.cx, e.cursor.cy), (0, 0));
+    }
+
+    #[test]
+    fn select_clamps_extent_to_grid_edge() {
+        let mut e = editor(8, 8);
+        e.select(2, 2, 100, 100);
+        assert_eq!((e.cursor.cw, e.cursor.ch), (5, 5));
+    }
+
+    #[test]
+    fn select_computes_inclusive_bounds() {
+        let mut e = editor(8, 8);
+        e.select(2, 2, 3, 3);
+        assert_eq!((e.cursor.min_x, e.cursor.max_x), (2, 5));
+        assert_eq!((e.cursor.min_y, e.cursor.max_y), (2, 5));
+    }
+
+    #[test]
+    fn select_all_spans_whole_grid() {
+        let mut e = editor(8, 8);
+        e.select_all();
+        assert_eq!((e.cursor.min_x, e.cursor.max_x), (0, 7));
+        assert_eq!((e.cursor.min_y, e.cursor.max_y), (0, 7));
+        assert_eq!(e.mode, InputMode::Selection);
+    }
+
+    #[test]
+    fn move_cursor_clamps_at_eastern_edge() {
+        let mut e = editor(8, 8);
+        e.move_cursor(100, 0);
+        assert_eq!(e.cursor.cx, 7);
+    }
+
+    #[test]
+    fn move_cursor_steps_within_grid() {
+        let mut e = editor(8, 8);
+        e.move_cursor(3, 0);
+        assert_eq!(e.cursor.cx, 3);
+    }
+
+    #[test]
+    fn scale_cursor_grows_selection_width() {
+        let mut e = editor(8, 8);
+        e.select(0, 0, 0, 0);
+        e.scale_cursor(3, 0);
+        assert_eq!(e.cursor.cw, 3);
+    }
+
+    #[test]
+    fn drag_moves_block_and_cursor() {
+        let mut e = editor(4, 4);
+        e.o2.write_silent(0, 0, 'A');
+        e.select(0, 0, 0, 0);
+        e.drag(1, 0);
+        assert_eq!(e.glyph_at(0, 0), '.');
+        assert_eq!(e.glyph_at(1, 0), 'A');
+        assert_eq!(e.cursor.cx, 1);
+    }
+}

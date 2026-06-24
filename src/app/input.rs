@@ -1136,3 +1136,78 @@ pub fn autocomplete_path(input: &str) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{handle_key, sanitize_paste};
+    use crate::app::editor::EditorState;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn press(app: &mut EditorState, c: char) {
+        handle_key(app, KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+
+    #[test]
+    fn strips_mouse_report_escape_sequence() {
+        assert_eq!(sanitize_paste("a\x1b[43;31;12Mb"), "ab");
+    }
+
+    #[test]
+    fn strips_osc_sequence() {
+        assert_eq!(sanitize_paste("a\x1b]0;title\x07b"), "ab");
+    }
+
+    #[test]
+    fn strips_control_characters() {
+        assert_eq!(sanitize_paste("a\x07\tb"), "ab");
+    }
+
+    #[test]
+    fn preserves_newlines_and_carriage_returns() {
+        assert_eq!(sanitize_paste("a\nb\r"), "a\nb\r");
+    }
+
+    #[test]
+    fn preserves_grid_glyphs() {
+        assert_eq!(sanitize_paste("aZ5*#;_"), "aZ5*#;_");
+    }
+
+    #[test]
+    fn tile_width_grows_and_caps_at_sixteen() {
+        let mut e = EditorState::new(64, 64, 1, 128);
+        for _ in 0..40 {
+            press(&mut e, ']');
+        }
+        assert_eq!(e.grid_w, 16);
+    }
+
+    #[test]
+    fn tile_width_shrinks_and_floors_at_four() {
+        let mut e = EditorState::new(64, 64, 1, 128);
+        for _ in 0..40 {
+            press(&mut e, '[');
+        }
+        assert_eq!(e.grid_w, 4);
+    }
+
+    #[test]
+    fn tile_height_is_bounded_like_width() {
+        let mut e = EditorState::new(64, 64, 1, 128);
+        for _ in 0..40 {
+            press(&mut e, '}');
+        }
+        assert_eq!(e.grid_h, 16);
+        for _ in 0..40 {
+            press(&mut e, '{');
+        }
+        assert_eq!(e.grid_h, 4);
+    }
+
+    #[test]
+    fn canvas_grows_by_one_tile_width() {
+        let mut e = EditorState::new(8, 8, 1, 128);
+        let before = e.o2.w;
+        press(&mut e, ')');
+        assert_eq!(e.o2.w, before + e.grid_w);
+    }
+}

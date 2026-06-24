@@ -43,3 +43,41 @@ impl EditorState {
         self.bpm_target = new_val;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::app::editor::EditorState;
+
+    fn editor() -> EditorState {
+        EditorState::new(8, 8, 1, 128)
+    }
+
+    #[test]
+    fn set_bpm_clamps_below_minimum() {
+        let mut e = editor();
+        e.set_bpm(0);
+        assert_eq!(e.bpm, 1);
+    }
+
+    #[test]
+    fn set_bpm_clamps_above_maximum() {
+        let mut e = editor();
+        e.set_bpm(10_000);
+        assert_eq!(e.bpm, 360);
+    }
+
+    #[test]
+    fn set_bpm_syncs_target() {
+        let mut e = editor();
+        e.set_bpm(150);
+        assert_eq!(e.bpm_target, 150);
+    }
+
+    #[test]
+    fn mod_bpm_clamps_to_range() {
+        let mut e = editor();
+        e.set_bpm(120);
+        e.mod_bpm(-1000);
+        assert_eq!(e.bpm, 1);
+    }
+}

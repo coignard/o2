@@ -99,3 +99,54 @@ impl Default for History {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::History;
+
+    #[test]
+    fn undo_restores_previous_frame() {
+        let mut h = History::with_limit(8);
+        h.record(&['a']);
+        h.record(&['b']);
+        let mut cells = vec!['b'];
+        h.undo(&mut cells);
+        assert_eq!(cells, vec!['a']);
+    }
+
+    #[test]
+    fn redo_reapplies_undone_frame() {
+        let mut h = History::with_limit(8);
+        h.record(&['a']);
+        h.record(&['b']);
+        let mut cells = vec!['b'];
+        h.undo(&mut cells);
+        h.redo(&mut cells);
+        assert_eq!(cells, vec!['b']);
+    }
+
+    #[test]
+    fn identical_frames_are_not_recorded_twice() {
+        let mut h = History::with_limit(8);
+        h.record(&['a']);
+        h.record(&['a']);
+        assert_eq!(h.frames.len(), 1);
+    }
+
+    #[test]
+    fn oldest_frame_is_evicted_beyond_limit() {
+        let mut h = History::with_limit(2);
+        h.record(&['a']);
+        h.record(&['b']);
+        h.record(&['c']);
+        assert_eq!(h.frames.len(), 2);
+        assert_eq!(h.offset, 1);
+    }
+
+    #[test]
+    fn zero_limit_disables_recording() {
+        let mut h = History::with_limit(0);
+        h.record(&['a']);
+        assert!(h.frames.is_empty());
+    }
+}

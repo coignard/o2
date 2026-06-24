@@ -1290,3 +1290,106 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
         PopupType::RoflCopter => draw_roflcopter_popup(f, popup_style, rect, app.o2.f),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{is_locals, is_marker, is_near};
+    use crate::app::editor::EditorState;
+
+    fn editor_with_tile(grid_w: usize, grid_h: usize) -> EditorState {
+        let mut e = EditorState::new(64, 64, 1, 128);
+        e.grid_w = grid_w;
+        e.grid_h = grid_h;
+        e.select(0, 0, 0, 0);
+        e
+    }
+
+    fn locals_reference(coord: usize, tile: usize) -> bool {
+        (coord as f64 % (tile as f64 / 4.0)).abs() < 1e-9
+    }
+
+    #[test]
+    fn marker_sits_on_tile_corners() {
+        let e = editor_with_tile(8, 8);
+        assert!(is_marker(&e, 0, 0));
+        assert!(is_marker(&e, 8, 8));
+        assert!(is_marker(&e, 16, 0));
+        assert!(!is_marker(&e, 4, 0));
+        assert!(!is_marker(&e, 8, 4));
+    }
+
+    #[test]
+    fn marker_follows_tile_width() {
+        let e = editor_with_tile(9, 8);
+        assert!(is_marker(&e, 9, 0));
+        assert!(!is_marker(&e, 8, 0));
+    }
+
+    #[test]
+    fn near_covers_the_tile_around_the_cursor() {
+        let mut e = editor_with_tile(8, 8);
+        e.select(10, 10, 0, 0);
+        assert!(is_near(&e, 8, 8));
+        assert!(is_near(&e, 16, 16));
+        assert!(!is_near(&e, 7, 8));
+        assert!(!is_near(&e, 17, 16));
+    }
+
+    #[test]
+    fn locals_match_orca_for_every_tile_width() {
+        for tile in 4..=16 {
+            let e = editor_with_tile(tile, tile);
+            for x in 0..=tile {
+                assert_eq!(
+                    is_locals(&e, x, 0),
+                    locals_reference(x, tile),
+                    "x={x} tile={tile}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn locals_require_both_axes_on_quarter_grid() {
+        let e = editor_with_tile(8, 8);
+        assert!(is_locals(&e, 0, 0));
+        assert!(is_locals(&e, 2, 2));
+        assert!(!is_locals(&e, 1, 2));
+        assert!(!is_locals(&e, 2, 1));
+    }
+
+    #[test]
+    fn locals_skip_intermediate_dots_on_indivisible_width() {
+        let e = editor_with_tile(9, 9);
+        assert!(is_locals(&e, 0, 0));
+        assert!(!is_locals(&e, 2, 0));
+        assert!(!is_locals(&e, 4, 0));
+    }
+
+    #[test]
+    fn resize_grows_canvas_and_preserves_content() {
+        let mut e = EditorState::new(4, 4, 1, 128);
+        e.o2.write_silent(1, 1, 'A');
+        e.resize(8, 8);
+        assert_eq!((e.o2.w, e.o2.h), (8, 8));
+        assert_eq!(e.glyph_at(1, 1), 'A');
+    }
+
+    #[test]
+    fn resize_refuses_to_shrink_below_content() {
+        let mut e = EditorState::new(8, 8, 1, 128);
+        e.o2.write_silent(6, 6, 'A');
+        e.resize(2, 2);
+        assert!(e.o2.w >= 7 && e.o2.h >= 7);
+        assert_eq!(e.glyph_at(6, 6), 'A');
+    }
+
+    #[test]
+    fn resize_keeps_cursor_inside_canvas() {
+        let mut e = EditorState::new(16, 16, 1, 128);
+        e.select(10, 10, 0, 0);
+        e.resize(12, 12);
+        assert!(e.cursor.cx < e.o2.w);
+        assert!(e.cursor.cy < e.o2.h);
+    }
+}
