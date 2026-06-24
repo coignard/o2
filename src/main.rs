@@ -320,6 +320,20 @@ fn main() -> Result<()> {
         original_hook(panic_info);
     }));
 
+    #[cfg(unix)]
+    {
+        use signal_hook::consts::{SIGHUP, SIGTERM};
+        use signal_hook::iterator::Signals;
+        if let Ok(mut signals) = Signals::new([SIGTERM, SIGHUP]) {
+            std::thread::spawn(move || {
+                for sig in signals.forever() {
+                    restore_terminal();
+                    std::process::exit(128 + sig);
+                }
+            });
+        }
+    }
+
     enable_raw_mode()?;
     execute!(
         io::stdout(),
