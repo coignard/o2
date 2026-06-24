@@ -1,6 +1,6 @@
 [package]
 name = "o2-rs"
-version = "0.3.1"
+version = "0.3.2"
 authors = [
     "René Coignard <contact@renecoignard.com>"
 ]
@@ -31,6 +31,9 @@ coremidi = "0.9.1"
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 midir = "0.11.0"
 
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3"
+
 [dev-dependencies]
 assert-json-diff = "2.0"
 criterion = "0.8.2"
@@ -54,5 +57,5 @@ path = "src/main.rs"
 strip = true
 lto = true
 codegen-units = 1
-panic = "abort"
+panic = "unwind"
 opt-level = 3

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.2
+
+### Added
+
+- On Unix, `SIGTERM` and `SIGHUP` now restore the terminal before the process exits, so an external `kill` or a closed terminal no longer leaves the shell in raw mode.
+
+### Changed
+
+- Release builds now unwind on panic instead of aborting, so the panic handler runs on a crash: the terminal is restored and the in-progress patch is written to `.o2.save`.
+- MIDI frame submission is non-blocking, falling back to a blocking send only when the channel is momentarily full. The UI never stalls on the clock thread and no notes are dropped.
+
+### Fixed
+
+- Local guide dots use `(x * 4) % grid == 0`.
+- The status-bar variable readout no longer slices the string on byte offsets, removing a latent panic on non-ASCII content.
+
 ## 0.3.1
 
 ### Fixed
