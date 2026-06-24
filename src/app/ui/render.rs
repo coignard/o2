@@ -42,8 +42,8 @@ fn is_near(app: &EditorState, x: usize, y: usize) -> bool {
 
 fn is_locals(app: &EditorState, x: usize, y: usize) -> bool {
     is_near(app, x, y)
-        && x.is_multiple_of((app.grid_w / 4).max(1))
-        && y.is_multiple_of((app.grid_h / 4).max(1))
+        && (x * 4).is_multiple_of(app.grid_w.max(1))
+        && (y * 4).is_multiple_of(app.grid_h.max(1))
 }
 
 fn is_invisible(app: &EditorState, x: usize, y: usize, g: char) -> bool {
@@ -427,10 +427,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
                 vars
             } else {
                 let var_offset = app.o2.f % vars.len();
-                let mut d = String::new();
-                d.push_str(&vars[var_offset..]);
-                d.push_str(&vars[..var_offset]);
-                d.chars().take(max).collect()
+                vars.chars().cycle().skip(var_offset).take(max).collect()
             };
             write_ui(
                 &mut ui_l2,
