@@ -326,7 +326,7 @@ fn main() -> Result<()> {
         use signal_hook::iterator::Signals;
         if let Ok(mut signals) = Signals::new([SIGTERM, SIGHUP]) {
             std::thread::spawn(move || {
-                for sig in signals.forever() {
+                if let Some(sig) = signals.forever().next() {
                     restore_terminal();
                     std::process::exit(128 + sig);
                 }
