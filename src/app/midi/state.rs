@@ -341,7 +341,9 @@ impl MidiState {
             ip: self.ip.clone(),
             osc_midi_bidule: self.osc_midi_bidule.clone(),
         };
-        let _ = self.frame_tx.send(frame);
+        if let Err(std::sync::mpsc::TrySendError::Full(frame)) = self.frame_tx.try_send(frame) {
+            let _ = self.frame_tx.send(frame);
+        }
     }
 
     pub fn silence(&mut self) {
