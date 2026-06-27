@@ -77,6 +77,8 @@ O₂ is a Rust port of the [ORCΛ](https://github.com/hundredrabbits/Orca) esote
 
 ## License
 
+<img src="assets/gplv3.svg" height="70" align="right">
+
 The O₂ source code is © 2026 René Coignard and licensed under the [GNU General Public License v3.0 or later](LICENSE).
 
 The `examples/` directory contains patch files from the [Orca-C](https://github.com/hundredrabbits/Orca-c) project, © 2017 Hundredrabbits, and are distributed under the [MIT License](examples/LICENSE).
