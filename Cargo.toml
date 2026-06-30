@@ -32,7 +32,7 @@ coremidi = "0.9.1"
 midir = "0.11.0"
 
 [target.'cfg(unix)'.dependencies]
-signal-hook = "0.3"
+signal-hook = "0.4"
 
 [dev-dependencies]
 assert-json-diff = "2.0"
