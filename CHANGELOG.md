@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+### Changed
+
+- Bumped deps.
+
 ## 0.3.2
 
 ### Added
