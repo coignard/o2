@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.4
+
+### Changed
+
+- Bumped bytemuck from 1.25.0 to 1.25.1.
+- Bumped cc from 1.2.66 to 1.2.67.
+- Bumped lru from 0.18.0 to 0.18.1.
+- Bumped rand from 0.8.6 to 0.8.7.
+- Bumped regex from 1.12.4 to 1.13.0.
+- Bumped regex-automata from 0.4.14 to 0.4.15.
+- Bumped zerocopy from 0.8.53 to 0.8.54.
+- Bumped zerocopy-derive from 0.8.53 to 0.8.54.
+
 ## 0.3.3
 
 ### Changed
