@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.3.5
+
+### Changed
+
+- Bumped bitflags from 2.13.0 to 2.13.1.
+- Bumped bytemuck from 1.25.1 to 1.25.2.
+- Bumped cc from 1.2.67 to 1.4.0.
+- Bumped cfg_aliases from 0.2.1 to 0.2.2.
+- Bumped coremidi-sys from 3.2.0 to 3.2.1.
+- Bumped either from 1.16.0 to 1.17.0.
+- Bumped futures-core from 0.3.32 to 0.3.33.
+- Bumped futures-task from 0.3.32 to 0.3.33.
+- Bumped futures-util from 0.3.32 to 0.3.33.
+- Bumped glob from 0.3.3 to 0.3.4.
+- Bumped jni-min-helper from 0.3.2 to 0.3.3.
+- Bumped libc from 0.2.186 to 0.2.189.
+- Bumped mio from 1.2.1 to 1.2.2.
+- Bumped pest from 2.8.7 to 2.8.8.
+- Bumped pest_derive from 2.8.7 to 2.8.8.
+- Bumped pest_generator from 2.8.7 to 2.8.8.
+- Bumped pest_meta from 2.8.7 to 2.8.8.
+- Bumped portable-atomic from 1.13.1 to 1.14.0.
+- Bumped proc-macro2 from 1.0.106 to 1.0.107.
+- Bumped quote from 1.0.46 to 1.0.47.
+- Bumped regex from 1.13.0 to 1.13.1.
+- Bumped regex-automata from 0.4.15 to 0.4.16.
+- Bumped simd-adler32 from 0.3.9 to 0.3.10.
+- Bumped thiserror from 2.0.18 to 2.0.19.
+- Bumped thiserror-impl from 2.0.18 to 2.0.19.
+- Bumped time from 0.3.53 to 0.3.54.
+- Bumped time-macros from 0.2.31 to 0.2.32.
+- Bumped uuid from 1.23.4 to 1.24.0.
+- Bumped zerocopy from 0.8.54 to 0.8.55.
+- Bumped zerocopy-derive from 0.8.54 to 0.8.55.
+- Bumped zmij from 1.0.21 to 1.0.23.
+
 ## 0.3.4
 
 ### Changed
