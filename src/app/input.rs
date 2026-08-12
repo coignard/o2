@@ -176,7 +176,6 @@ pub fn handle_mouse(app: &mut EditorState, mouse_event: MouseEvent) {
                     }
                 }
                 PopupType::Controls
-                | PopupType::Operators
                 | PopupType::About { .. }
                 | PopupType::Msg { .. }
                 | PopupType::RoflCopter => {
@@ -400,7 +399,6 @@ fn handle_popup_key(
 
     match popup {
         PopupType::Controls
-        | PopupType::Operators
         | PopupType::About { .. }
         | PopupType::Msg { .. }
         | PopupType::RoflCopter => {
@@ -482,7 +480,10 @@ fn handle_popup_key(
                 }
                 11 => spawn_popups.push(PopupType::ClockMenu { selected: 0 }),
                 13 => spawn_popups.push(PopupType::Controls),
-                14 => spawn_popups.push(PopupType::Operators),
+                14 => {
+                    app.guide = true;
+                    close_popup = true;
+                }
                 15 => spawn_popups.push(PopupType::About {
                     opened_at: std::time::Instant::now(),
                 }),

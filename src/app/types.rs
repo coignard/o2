@@ -34,7 +34,6 @@ pub enum PromptPurpose {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PopupType {
     Controls,
-    Operators,
     About {
         opened_at: std::time::Instant,
     },

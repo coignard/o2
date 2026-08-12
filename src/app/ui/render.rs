@@ -487,14 +487,6 @@ pub fn draw(f: &mut Frame, app: &EditorState) {
 pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect>) -> Rect {
     let (mut width, mut height) = match popup_type {
         PopupType::Controls => (57, 25),
-        PopupType::Operators => {
-            const N_OPS: u16 = 35;
-            const COL_INNER_W: u16 = 35;
-            let avail_rows = area.height.saturating_sub(2).max(1);
-            let rows_per_col = N_OPS.min(avail_rows);
-            let num_cols = N_OPS.div_ceil(rows_per_col);
-            (num_cols * COL_INNER_W + 2, rows_per_col + 2)
-        }
         PopupType::About { .. } => (47, 13),
         PopupType::MainMenu { .. } => (26, 20),
         PopupType::MidiMenu { devices, .. } => {
@@ -524,7 +516,6 @@ pub fn get_popup_rect(area: Rect, popup_type: &PopupType, prev_rect: Option<Rect
     let center_always = matches!(
         popup_type,
         PopupType::Controls
-            | PopupType::Operators
             | PopupType::About { .. }
             | PopupType::Msg { .. }
             | PopupType::RoflCopter
@@ -701,96 +692,6 @@ fn draw_controls_popup(f: &mut Frame, popup_style: Style, bold_style: Style, rec
         .style(popup_style);
 
     f.render_widget(table, rect);
-}
-
-fn draw_operators_popup(f: &mut Frame, popup_style: Style, bold_style: Style, rect: Rect) {
-    let operators = [
-        ('A', "Outputs sum of inputs."),
-        ('B', "Outputs difference of inputs."),
-        ('C', "Outputs modulo of frame."),
-        ('D', "Bangs on modulo of frame."),
-        ('E', "Moves eastward, or bangs."),
-        ('F', "Bangs if inputs are equal."),
-        ('G', "Writes operands with offset."),
-        ('H', "Halts southward operand."),
-        ('I', "Increments southward operand."),
-        ('J', "Outputs northward operand."),
-        ('K', "Reads multiple variables."),
-        ('L', "Outputs smallest input."),
-        ('M', "Outputs product of inputs."),
-        ('N', "Moves Northward, or bangs."),
-        ('O', "Reads operand with offset."),
-        ('P', "Writes eastward operand."),
-        ('Q', "Reads operands with offset."),
-        ('R', "Outputs random value."),
-        ('S', "Moves southward, or bangs."),
-        ('T', "Reads eastward operand."),
-        ('U', "Bangs on Euclidean rhythm."),
-        ('V', "Reads and writes variable."),
-        ('W', "Moves westward, or bangs."),
-        ('X', "Writes operand with offset."),
-        ('Y', "Outputs westward operand."),
-        ('Z', "Transitions operand to target."),
-        ('*', "Bangs neighboring operands."),
-        ('#', "Halts line."),
-        ('$', "Sends ORCA command."),
-        (':', "Sends MIDI note."),
-        ('!', "Sends MIDI control change."),
-        ('?', "Sends MIDI pitch bend."),
-        ('%', "Sends MIDI monophonic note."),
-        ('=', "Sends OSC message."),
-        (';', "Sends UDP message."),
-    ];
-
-    let block = Block::bordered().title(" Operators ").style(popup_style);
-    let inner = block.inner(rect);
-    f.render_widget(block, rect);
-
-    if inner.height == 0 || inner.width == 0 {
-        return;
-    }
-
-    let n = operators.len();
-    let rows_per_col = inner.height as usize;
-    let num_cols = n.div_ceil(rows_per_col).max(1);
-    let col_w = inner.width / num_cols as u16;
-
-    for col in 0..num_cols {
-        let start = col * rows_per_col;
-        if start >= n {
-            break;
-        }
-        let end = (start + rows_per_col).min(n);
-
-        let col_x = inner.x + col as u16 * col_w;
-        let this_col_w = if col == num_cols - 1 {
-            inner.width.saturating_sub(col as u16 * col_w)
-        } else {
-            col_w
-        };
-
-        if this_col_w == 0 {
-            break;
-        }
-
-        let col_rect = Rect::new(col_x, inner.y, this_col_w, inner.height);
-        let desc_w = this_col_w.saturating_sub(3);
-
-        let rows: Vec<Row> = operators[start..end]
-            .iter()
-            .map(|&(g, d)| {
-                Row::new(vec![
-                    Cell::from(Span::styled(format!(" {}", g), bold_style)),
-                    Cell::from(Span::styled(format!(" {}", d), popup_style)),
-                ])
-            })
-            .collect();
-
-        let table = Table::new(rows, [Constraint::Length(3), Constraint::Length(desc_w)])
-            .style(popup_style);
-
-        f.render_widget(table, col_rect);
-    }
 }
 
 fn draw_about_popup(f: &mut Frame, popup_style: Style, rect: Rect, opened_at: &std::time::Instant) {
@@ -1255,7 +1156,6 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
 
     match popup_type {
         PopupType::Controls => draw_controls_popup(f, popup_style, bold_style, rect),
-        PopupType::Operators => draw_operators_popup(f, popup_style, bold_style, rect),
         PopupType::About { opened_at } => draw_about_popup(f, popup_style, rect, opened_at),
         PopupType::MainMenu { selected } => {
             draw_main_menu_popup(f, popup_style, bold_style, rect, *selected)
