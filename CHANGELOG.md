@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.6
+
+### Changed
+
+- Bumped aho-corasick from 1.1.4 to 1.1.5.
+- Bumped android_system_properties from 0.1.5 to 0.1.6.
+- Bumped cc from 1.4.0 to 1.4.2.
+- Bumped clap from 4.6.5 to 4.6.6.
+- Bumped clap_builder from 4.6.5 to 4.6.6.
+- Bumped coremidi from 0.9.1 to 0.9.2.
+- Bumped darling from 0.23.0 to 0.24.0.
+- Bumped darling_core from 0.23.0 to 0.24.0.
+- Bumped darling_macro from 0.23.0 to 0.24.0.
+- Bumped find-msvc-tools from 0.1.9 to 0.1.10.
+- Bumped futures-core from 0.3.33 to 0.3.34.
+- Bumped futures-task from 0.3.33 to 0.3.34.
+- Bumped futures-util from 0.3.33 to 0.3.34.
+- Bumped instability from 0.3.12 to 0.3.13.
+- Bumped jni-min-helper from 0.3.3 to 0.3.4.
+- Bumped js-sys from 0.3.103 to 0.3.104.
+- Bumped line-clipping from 0.3.7 to 0.3.8.
+- Bumped lru from 0.18.1 to 0.18.2.
+- Bumped palette from 0.7.6 to 0.7.7.
+- Bumped palette_derive from 0.7.6 to 0.7.7.
+- Bumped portable-atomic from 1.14.0 to 1.15.0.
+- Bumped regex-automata from 0.4.16 to 0.4.18.
+- Bumped thiserror from 2.0.19 to 2.0.20.
+- Bumped thiserror-impl from 2.0.19 to 2.0.20.
+- Bumped time from 0.3.54 to 0.3.55.
+- Bumped wasm-bindgen from 0.2.126 to 0.2.127.
+- Bumped wasm-bindgen-macro from 0.2.126 to 0.2.127.
+- Bumped wasm-bindgen-macro-support from 0.2.126 to 0.2.127.
+- Bumped wasm-bindgen-shared from 0.2.126 to 0.2.127.
+- Bumped web-sys from 0.3.103 to 0.3.104.
+- Bumped zerocopy from 0.8.55 to 0.8.56.
+- Bumped zerocopy-derive from 0.8.55 to 0.8.56.
+- Bumped zune-core from 0.5.1 to 0.5.3.
+
 ## 0.3.5
 
 ### Changed
