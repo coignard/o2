@@ -28,6 +28,8 @@ use ratatui::{
     widgets::{Block, Cell, Clear, List, ListItem, Paragraph, Row, Table},
 };
 
+const INTRO_FRAMES: usize = 250;
+
 fn is_marker(app: &EditorState, x: usize, y: usize) -> bool {
     x.is_multiple_of(app.grid_w) && y.is_multiple_of(app.grid_h)
 }
@@ -317,7 +319,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
         contrast,
     );
 
-    let io_in_msg = if app.o2.f < 250 {
+    let io_in_msg = if app.o2.f < INTRO_FRAMES {
         format!("< {}", app.midi.input_device_name)
     } else {
         String::new()
@@ -440,7 +442,7 @@ fn draw_status_bar(f: &mut Frame, app: &EditorState, area: Rect) {
             );
         }
 
-        let io_out_msg = if app.o2.f < 250 {
+        let io_out_msg = if app.o2.f < INTRO_FRAMES {
             format!("> {}", app.midi.device_name)
         } else {
             String::new()
@@ -888,16 +890,23 @@ fn draw_confirm_new_popup(
 
 fn draw_confirm_quit_popup(
     f: &mut Frame,
+    app: &EditorState,
     popup_style: Style,
     bold_style: Style,
     rect: Rect,
     selected: usize,
     has_file: bool,
 ) {
-    let items: &[&str] = if has_file {
-        &["Save", "Save As...", "Yes, do as I say!", "Cancel"]
+    let in_intro = app.o2.f < INTRO_FRAMES;
+    let force_label = if in_intro {
+        "Yes, do as I say!"
     } else {
-        &["Save As...", "Yes, do as I say!", "Cancel"]
+        "Force Quit"
+    };
+    let items: &[&str] = if has_file {
+        &["Save", "Save As...", force_label, "Cancel"]
+    } else {
+        &["Save As...", force_label, "Cancel"]
     };
     let list_items: Vec<ListItem> = items
         .iter()
@@ -910,11 +919,12 @@ fn draw_confirm_quit_popup(
             }
         })
         .collect();
-    let list = List::new(list_items).block(
-        Block::bordered()
-            .title(" Leaving so soon? ")
-            .style(popup_style),
-    );
+    let title = if in_intro {
+        " Leaving so soon? "
+    } else {
+        " Quit "
+    };
+    let list = List::new(list_items).block(Block::bordered().title(title).style(popup_style));
     f.render_widget(list, rect);
 }
 
@@ -1164,7 +1174,7 @@ fn draw_popup_content(f: &mut Frame, app: &EditorState, popup_type: &PopupType, 
             draw_confirm_new_popup(f, popup_style, bold_style, rect, *selected)
         }
         PopupType::ConfirmQuit { selected, has_file } => {
-            draw_confirm_quit_popup(f, popup_style, bold_style, rect, *selected, *has_file)
+            draw_confirm_quit_popup(f, app, popup_style, bold_style, rect, *selected, *has_file)
         }
         PopupType::AutofitMenu { selected } => {
             draw_autofit_popup(f, popup_style, bold_style, rect, *selected)
