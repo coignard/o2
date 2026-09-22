@@ -271,7 +271,7 @@ impl EditorState {
         self.o2.tick(&mut self.midi.engine);
 
         if !self.o2.commands.is_empty() {
-            let cmds: Vec<_> = self.o2.commands.drain(..).collect();
+            let cmds = std::mem::take(&mut self.o2.commands);
             for (msg, pos) in cmds {
                 crate::app::commander::run_command(self, &msg, pos);
             }
@@ -294,7 +294,7 @@ impl EditorState {
                 true,
             );
             if !self.o2.commands.is_empty() {
-                let cmds: Vec<_> = self.o2.commands.drain(..).collect();
+                let cmds = std::mem::take(&mut self.o2.commands);
                 for (msg, pos) in cmds {
                     crate::app::commander::run_command(self, &msg, pos);
                 }
