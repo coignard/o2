@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.3.7
+
+### Changed
+
+- Bumped bitflags from 2.13.1 to 2.13.2.
+- Bumped cc from 1.4.2 to 1.4.7.
+- Bumped cfg-if from 1.0.4 to 1.0.5.
+- Bumped clap_lex from 1.1.0 to 1.1.1.
+- Bumped combine from 4.6.7 to 4.6.8.
+- Bumped crc32fast from 1.5.0 to 1.5.2.
+- Bumped crossbeam-deque from 0.8.7 to 0.8.8.
+- Bumped crossbeam-epoch from 0.9.20 to 0.9.21.
+- Bumped crossbeam-utils from 0.8.22 to 0.8.23.
+- Bumped darling from 0.24.0 to 0.24.1.
+- Bumped darling_core from 0.24.0 to 0.24.1.
+- Bumped darling_macro from 0.24.0 to 0.24.1.
+- Bumped either from 1.17.0 to 1.18.0.
+- Bumped error-code from 3.3.2 to 3.4.0.
+- Bumped find-msvc-tools from 0.1.10 to 0.1.13.
+- Bumped finl_unicode from 1.4.0 to 1.5.0.
+- Bumped flate2 from 1.1.9 to 1.1.10.
+- Bumped js-sys from 0.3.104 to 0.3.105.
+- Bumped log from 0.4.33 to 0.4.34.
+- Bumped lru from 0.18.2 to 0.18.4.
+- Bumped mio from 1.2.2 to 1.2.3.
+- Bumped pest from 2.8.8 to 2.9.2.
+- Bumped pest_derive from 2.8.8 to 2.9.2.
+- Bumped pest_generator from 2.8.8 to 2.9.2.
+- Bumped pest_meta from 2.8.8 to 2.9.2.
+- Bumped pkg-config from 0.3.33 to 0.3.34.
+- Bumped rand from 0.8.7 to 0.8.8.
+- Bumped rustix from 1.1.4 to 1.1.5.
+- Bumped smallvec from 1.15.2 to 1.16.1.
+- Bumped syn from 3.0.3 to 3.0.6.
+- Bumped unicode-ident from 1.0.24 to 1.0.26.
+- Bumped uuid from 1.24.0 to 1.26.1.
+- Bumped wasm-bindgen from 0.2.127 to 0.2.128.
+- Bumped wasm-bindgen-macro from 0.2.127 to 0.2.128.
+- Bumped wasm-bindgen-macro-support from 0.2.127 to 0.2.128.
+- Bumped wasm-bindgen-shared from 0.2.127 to 0.2.128.
+- Bumped web-sys from 0.3.104 to 0.3.105.
+- Bumped zerocopy from 0.8.56 to 0.8.57.
+- Bumped zerocopy-derive from 0.8.56 to 0.8.57.
+
 ## 0.3.6
 
 ### Changed
