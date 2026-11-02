@@ -321,7 +321,7 @@ impl MidiState {
 
     pub fn take_engine_tick(&self) -> bool {
         self.engine_ticks
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |c| c.checked_sub(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |c| c.checked_sub(1))
             .is_ok()
     }
 

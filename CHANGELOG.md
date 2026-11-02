@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.3.8
+
+### Changed
+
+- Bumped alsa from 0.11.0 to 0.12.1.
+- Bumped alsa-sys from 0.4.0 to 0.6.1.
+- Bumped arboard from 3.6.1 to 3.7.0.
+- Bumped cc from 1.4.7 to 1.11.0.
+- Bumped clipboard-win from 5.4.1 to 5.4.3.
+- Bumped combine from 4.6.8 to 4.6.9.
+- Bumped crc32fast from 1.5.2 to 1.5.4.
+- Bumped deranged from 0.5.8 to 0.5.9.
+- Bumped either from 1.18.0 to 1.19.0.
+- Bumped equivalent from 1.0.2 to 1.0.3.
+- Bumped find-msvc-tools from 0.1.13 to 0.1.15.
+- Bumped indoc from 2.0.7 to 2.0.8.
+- Bumped instability from 0.3.13 to 0.3.14.
+- Bumped js-sys from 0.3.105 to 0.3.107.
+- Bumped kasuari from 0.4.12 to 0.4.13.
+- Bumped lazy_static from 1.5.0 to 1.5.1.
+- Bumped libc from 0.2.189 to 0.2.191.
+- Bumped litrs from 1.0.0 to 1.0.1.
+- Bumped log from 0.4.34 to 0.4.35.
+- Bumped lru from 0.18.4 to 0.18.5.
+- Bumped mac_address from 1.1.8 to 1.2.1.
+- Bumped midir from 0.11.0 to 0.11.1.
+- Bumped mio from 1.2.3 to 1.2.4.
+- Bumped num_threads from 0.1.7 to 0.1.8.
+- Bumped objc2 from 0.6.4 to 0.6.5.
+- Bumped pest from 2.9.2 to 2.9.5.
+- Bumped pest_derive from 2.9.2 to 2.9.5.
+- Bumped pest_generator from 2.9.2 to 2.9.5.
+- Bumped pest_meta from 2.9.2 to 2.9.5.
+- Bumped powerfmt from 0.2.0 to 0.2.1.
+- Bumped rustix from 1.1.5 to 1.1.6.
+- Bumped serde_json from 1.0.151 to 1.0.154.
+- Bumped signal-hook from 0.4.4 to 0.4.6.
+- Bumped siphasher from 1.0.3 to 1.0.4.
+- Bumped smallvec from 1.16.1 to 1.16.4.
+- Bumped syn from 3.0.6 to 3.0.9.
+- Bumped thiserror from 2.0.20 to 2.0.21.
+- Bumped thiserror-impl from 2.0.20 to 2.0.21.
+- Bumped unicode-ident from 1.0.26 to 1.0.27.
+- Bumped unicode-width from 0.2.2 to 0.2.3.
+- Bumped uuid from 1.26.1 to 1.29.0.
+- Bumped wasm-bindgen from 0.2.128 to 0.2.130.
+- Bumped wasm-bindgen-macro from 0.2.128 to 0.2.130.
+- Bumped wasm-bindgen-macro-support from 0.2.128 to 0.2.130.
+- Bumped wasm-bindgen-shared from 0.2.128 to 0.2.130.
+- Bumped web-sys from 0.3.105 to 0.3.107.
+- Bumped zerocopy from 0.8.57 to 0.8.63.
+- Bumped zerocopy-derive from 0.8.57 to 0.8.63.
+
 ## 0.3.7
 
 ### Changed
